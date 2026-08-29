@@ -317,8 +317,17 @@ function renderPropertyUnavailable() {
 }
 
 function renderDirectPropertyRoute() {
-  const directPropertyId = window.location.hash.match(/^#\/property\/([^/?#]+)$/)?.[1];
-  if (directPropertyId) window.detail(decodeURIComponent(directPropertyId), false);
+  const route = window.location.hash;
+  const directPropertyId = route.match(/^#\/property\/([^/?#]+)$/)?.[1];
+  if (directPropertyId) return window.detail(decodeURIComponent(directPropertyId), false);
+
+  // Shared links should open the same public page as a navigation click.
+  if (route === '#/latest') return window.catalogue();
+  if (route === '#/commercial') return window.catalogue('Commercial');
+  if (route === '#/residential') return window.catalogue('Residential');
+  if (route === '#/contact') return window.contact();
+  if (route === '#/add') return window.propertyForm();
+  if (route === '#/requirement') return window.requirement();
 }
 
 window.sharePropertyLink = async function sharePropertyLink(id) {
