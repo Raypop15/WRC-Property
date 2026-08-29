@@ -255,6 +255,24 @@ function enhancePropertyForm() {
   }
 }
 
+function nextWrcPropertyId() {
+  const largestNumber = properties.reduce((largest, property) => {
+    const match = String(property.id || '').match(/^WRC\s*-\s*(\d+)$/i);
+    return match ? Math.max(largest, Number(match[1])) : largest;
+  }, 0);
+  return `WRC-${String(largestNumber + 1).padStart(3, '0')}`;
+}
+
+function setAutomaticPropertyId() {
+  const field = [...document.querySelectorAll('.form-field')]
+    .find(item => item.querySelector('label')?.textContent.trim() === 'Property ID');
+  const input = field?.querySelector('input');
+  if (!input) return;
+  input.value = wrcEditingProperty?.property_id || nextWrcPropertyId();
+  input.readOnly = true;
+  input.title = 'This property ID is assigned automatically.';
+}
+
 const staticPropertyForm = window.propertyForm;
 window.propertyForm = function propertyFormWithDatabase() {
   if (!wrcSession) return renderSignIn();
@@ -266,6 +284,7 @@ window.propertyForm = function propertyFormWithDatabase() {
   wrcCoverPhotoKey = null;
   staticPropertyForm();
   enhancePropertyForm();
+  setAutomaticPropertyId();
 };
 
 const staticHome = window.home;
