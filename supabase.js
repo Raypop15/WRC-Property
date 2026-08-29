@@ -151,7 +151,8 @@ const WRC_PROPERTY_TYPES = {
   ],
   Commercial: [
     'Shop Lot', 'Retail Lot', 'Office', 'Office Suite', 'Corporate Office',
-    'Shop Office', 'Commercial Building', 'Commercial Land', 'Hotel', 'Hotel Suite'
+    'Shop Office', 'Commercial Building', 'Commercial Bungalow', 'Commercial Land',
+    'Hotel', 'Hotel Suite'
   ],
   Industrial: [
     'Factory', 'Semi-Detached Factory', 'Detached Factory', 'Terrace Factory',
