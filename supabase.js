@@ -143,10 +143,50 @@ function optionalNumber(value) {
   return value === '' ? null : Number(value);
 }
 
+const WRC_PROPERTY_TYPES = {
+  Residential: [
+    'Condominium', 'Serviced Residence', 'Apartment', 'Flat', 'Studio', 'SOHO',
+    'Townhouse', 'Terrace House', 'Semi-Detached House', 'Bungalow', 'Villa',
+    'Cluster House', 'Penthouse', 'Duplex', 'Landed Residential', 'Residential Land'
+  ],
+  Commercial: [
+    'Shop Lot', 'Retail Lot', 'Office', 'Office Suite', 'Corporate Office',
+    'Shop Office', 'Commercial Building', 'Commercial Land', 'Hotel', 'Hotel Suite'
+  ],
+  Industrial: [
+    'Factory', 'Semi-Detached Factory', 'Detached Factory', 'Terrace Factory',
+    'Warehouse', 'Factory + Warehouse', 'Industrial Building', 'Industrial Land'
+  ]
+};
+
+function propertyTypeChoices(category, selected = '') {
+  const groups = category === 'Residential'
+    ? [['Residential', WRC_PROPERTY_TYPES.Residential]]
+    : [['Commercial', WRC_PROPERTY_TYPES.Commercial], ['Industrial', WRC_PROPERTY_TYPES.Industrial]];
+  return `<option value="">Select property type</option>${groups.map(([label, types]) => `<optgroup label="${label}">${types.map(type => `<option value="${type}" ${selected === type ? 'selected' : ''}>${type}</option>`).join('')}</optgroup>`).join('')}`;
+}
+
 function enhancePropertyForm() {
   const grid = document.querySelector('.form-grid');
   const upload = document.querySelector('.upload');
   if (!grid || !upload) return;
+  const categoryControl = [...document.querySelectorAll('.form-field')]
+    .find(field => field.querySelector('label')?.textContent.trim() === 'Category')
+    ?.querySelector('select');
+  const typeField = [...document.querySelectorAll('.form-field')]
+    .find(field => field.querySelector('label')?.textContent.trim() === 'Property type');
+  let typeControl = typeField?.querySelector('input, select');
+  if (typeControl?.tagName === 'INPUT') {
+    typeControl.outerHTML = `<select id="wrcPropertyType" required>${propertyTypeChoices(categoryControl?.value)}</select>`;
+    typeControl = typeField.querySelector('select');
+  }
+  if (categoryControl && typeControl && !typeControl.dataset.wrcChoicesBound) {
+    categoryControl.addEventListener('change', () => {
+      const currentValue = typeControl.value;
+      typeControl.innerHTML = propertyTypeChoices(categoryControl.value, currentValue);
+    });
+    typeControl.dataset.wrcChoicesBound = 'true';
+  }
   if (!document.getElementById('propertyPhotos')) {
     upload.innerHTML = `<label for="propertyPhotos" style="cursor:pointer">↑ &nbsp; Add property photos<br><small>JPG, PNG or WEBP · Add more photos any time before saving</small></label><input id="propertyPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"><div id="photoQueue" style="margin-top:12px;font-size:12px;color:var(--ink)">No photos added yet</div>`;
     document.getElementById('propertyPhotos').addEventListener('change', event => {
@@ -226,7 +266,10 @@ function setFieldValue(label, value) {
   const field = [...document.querySelectorAll('.form-field')]
     .find(item => item.querySelector('label')?.textContent.trim() === label);
   const control = field?.querySelector('input, select, textarea');
-  if (control) control.value = value ?? '';
+  if (control) {
+    control.value = value ?? '';
+    if (label === 'Category') control.dispatchEvent(new Event('change'));
+  }
 }
 
 window.editListing = async function editListing(propertyDbId) {
