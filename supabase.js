@@ -46,10 +46,23 @@ function propertyFromDb(row) {
 }
 
 async function loadStock() {
-  const { data, error } = await wrcDb
+  if (!wrcSession) {
+    const { data, error } = await wrcDb.rpc('get_public_properties');
+    if (error) {
+      renderDatabaseSetup(error.message);
+      return;
+    }
+    properties.splice(0, properties.length, ...(data || []).map(record => propertyFromDb(record.property)));
+    state.selected.clear();
+    if (state.view === 'catalogue') renderPublicCatalogue(); else home();
+    return;
+  }
+
+  let query = wrcDb
     .from('properties')
     .select('*, property_photos(url, sort_order)')
     .order('date_added', { ascending: false });
+  const { data, error } = await query;
   if (error) {
     renderDatabaseSetup(error.message);
     return;
@@ -119,20 +132,46 @@ window.propertyForm = function propertyFormWithDatabase() {
 const staticHome = window.home;
 const staticCatalogue = window.catalogue;
 const staticDetail = window.detail;
-window.home = function protectedHome() {
-  if (!wrcSession) return renderSignIn();
+const staticRequirement = window.requirement;
+const staticRenderCatalogue = window.renderCatalogue;
+
+function renderPublicCatalogue() {
+  staticRenderCatalogue();
+  if (!wrcSession) {
+    const note = document.querySelector('.results-head .note');
+    if (note) note.textContent = 'Browse available WRC Property listings.';
+  }
+}
+
+window.home = function publicHome() {
   staticHome();
+  if (!wrcSession) {
+    const requirementButton = document.querySelector('.hero-actions .btn.outline');
+    if (requirementButton) {
+      requirementButton.textContent = 'Contact WRC Property';
+      requirementButton.onclick = () => window.contact();
+    }
+    const workflowButton = document.querySelector('.workflow .btn');
+    if (workflowButton) {
+      workflowButton.textContent = 'Agent sign in';
+      workflowButton.onclick = () => window.propertyForm();
+    }
+  }
 };
-window.catalogue = function protectedCatalogue(category) {
-  if (!wrcSession) return renderSignIn();
-  staticCatalogue(category);
+window.catalogue = function publicCatalogue(category) {
+  state.view = 'catalogue';
+  state.filter.category = category || '';
+  renderPublicCatalogue();
 };
-window.detail = function protectedDetail(id) {
-  if (!wrcSession && !window.wrcSharedMode) return renderSignIn();
+window.detail = function publicDetail(id) {
   staticDetail(id);
   if (wrcSession) addListingControls(id);
 };
-window.go = function protectedGo() { window.home(); };
+window.requirement = function protectedRequirement() {
+  if (!wrcSession) return renderSignIn();
+  staticRequirement();
+};
+window.go = function publicGo() { window.home(); };
 
 function addListingControls(propertyId) {
   const property = properties.find(item => item.id === propertyId);
@@ -332,6 +371,7 @@ window.shareShortlistOnWhatsApp = function () {
 };
 
 window.shortlist = async function createShareableShortlist() {
+  if (!wrcSession) return renderSignIn();
   const selected = properties.filter(property => state.selected.has(property.id));
   const selectedDbIds = selected.map(property => property.dbId).filter(Boolean);
   if (!selectedDbIds.length) return;
@@ -353,8 +393,13 @@ async function startWrc() {
   if (sharedId) return loadPublicShortlist(sharedId);
   const { data } = await wrcDb.auth.getSession();
   wrcSession = data.session;
-  if (wrcSession) await loadStock(); else renderSignIn();
+  window.wrcSession = wrcSession;
+  await loadStock();
 }
 
-wrcDb?.auth.onAuthStateChange((_event, session) => { wrcSession = session; });
+wrcDb?.auth.onAuthStateChange(async (_event, session) => {
+  wrcSession = session;
+  window.wrcSession = session;
+  if (session) await loadStock();
+});
 startWrc();
