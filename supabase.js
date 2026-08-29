@@ -60,6 +60,7 @@ async function loadStock() {
     properties.splice(0, properties.length, ...(data || []).map(record => propertyFromDb(record.property)));
     state.selected.clear();
     if (state.view === 'catalogue') renderPublicCatalogue(); else home();
+    renderDirectPropertyRoute();
     return;
   }
 
@@ -75,6 +76,7 @@ async function loadStock() {
   properties.splice(0, properties.length, ...data.map(propertyFromDb));
   state.selected.clear();
   if (state.view === 'catalogue') renderCatalogue(); else home();
+  renderDirectPropertyRoute();
 }
 
 function renderDatabaseSetup(errorMessage) {
