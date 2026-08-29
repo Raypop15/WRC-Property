@@ -549,11 +549,11 @@ document.addEventListener('submit', async event => {
   if (button) { button.disabled = true; button.textContent = 'Saving…'; }
   try {
     if (heading.includes('Property information')) {
-      await saveProperty();
+      const savedProperty = await saveProperty();
       wrcQueuedPhotos = [];
       wrcEditingProperty = null;
       await loadStock();
-      alert(wasEditing ? 'Listing updated successfully.' : 'Property saved. It is now part of your WRC stock.');
+      window.detail(savedProperty.property_id);
     } else {
       await saveRequirement();
       notice('Requirement saved. You can now search matching stock.');
