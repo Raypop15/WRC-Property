@@ -273,6 +273,12 @@ const staticCatalogue = window.catalogue;
 const staticDetail = window.detail;
 const staticRequirement = window.requirement;
 const staticRenderCatalogue = window.renderCatalogue;
+const staticContact = window.contact;
+const WRC_WHATSAPP_PRIMARY_URL = 'https://wa.me/message/46E4PP57VPIKE1';
+
+function whatsappIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.6a8.5 8.5 0 0 1-12.6 7.5L3.5 20.5l1.4-4.1A8.5 8.5 0 1 1 20.5 11.6Z"></path><path d="M8.8 8.1c.2-.4.4-.4.7-.4h.4c.2 0 .4.1.5.4l.7 1.6c.1.2.1.4 0 .6l-.5.7c.5 1 1.3 1.7 2.3 2.2l.7-.5c.2-.1.4-.1.6 0l1.6.7c.3.1.4.3.4.5v.4c0 .3 0 .5-.4.7-.4.2-1.1.3-1.8 0-1.1-.4-2.1-1.1-2.9-1.9-.9-.8-1.5-1.8-1.9-2.9-.3-.7-.2-1.4 0-1.8Z"></path></svg>`;
+}
 
 function renderPublicCatalogue() {
   staticRenderCatalogue();
@@ -335,6 +341,18 @@ window.detail = function publicDetail(id, updateUrl = true) {
 window.requirement = function protectedRequirement() {
   if (!wrcSession) return renderSignIn();
   staticRequirement();
+};
+window.whatsapp = function primaryWhatsapp() {
+  window.open(WRC_WHATSAPP_PRIMARY_URL, '_blank', 'noopener');
+};
+window.contact = function wrcContact() {
+  staticContact();
+  const phoneCard = [...document.querySelectorAll('.property-card')]
+    .find(card => card.textContent.includes('Phone & WhatsApp'));
+  const phoneHeading = phoneCard?.querySelector('h2');
+  if (phoneHeading && !document.getElementById('primaryWhatsappLink')) {
+    phoneHeading.insertAdjacentHTML('afterend', `<a id="primaryWhatsappLink" class="whatsapp-direct-link" href="${WRC_WHATSAPP_PRIMARY_URL}" target="_blank" rel="noopener">${whatsappIcon()} <span>WhatsApp this number</span></a>`);
+  }
 };
 window.go = function publicGo() { window.home(); };
 
