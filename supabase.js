@@ -300,8 +300,29 @@ window.catalogue = function publicCatalogue(category) {
   state.filter.category = category || '';
   renderPublicCatalogue();
 };
-window.detail = function publicDetail(id) {
+function listingLink(id) {
+  return `${window.location.origin}${window.location.pathname}#/property/${encodeURIComponent(id)}`;
+}
+
+function renderPropertyUnavailable() {
+  app.innerHTML = `<main>${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>This listing is unavailable.</h1><p>It may no longer be available or the link is incorrect.</p></div></div></main>${footer()}`;
+}
+
+window.sharePropertyLink = async function sharePropertyLink(id) {
+  const link = listingLink(id);
+  try { await navigator.clipboard.writeText(link); } catch (_) { /* Clipboard permission is optional. */ }
+  alert(`Listing link copied. You can now send it to your client:\n${link}`);
+};
+
+window.detail = function publicDetail(id, updateUrl = true) {
+  const property = properties.find(item => item.id === id);
+  if (!property) return renderPropertyUnavailable();
   staticDetail(id);
+  if (updateUrl && !window.wrcSharedMode) history.pushState({}, '', `#/property/${encodeURIComponent(id)}`);
+  const aside = document.querySelector('.detail-aside');
+  if (aside && !document.getElementById('sharePropertyLink')) {
+    aside.insertAdjacentHTML('beforeend', `<button id="sharePropertyLink" class="btn outline small" style="width:100%;margin-top:10px" onclick="sharePropertyLink('${id}')">Copy listing link</button>`);
+  }
   if (wrcSession) addListingControls(id);
 };
 window.requirement = function protectedRequirement() {
@@ -564,9 +585,11 @@ async function startWrc() {
   }
   const sharedId = window.location.hash.match(/^#\/shortlist\/([\w-]+)$/)?.[1];
   if (sharedId) return loadPublicShortlist(sharedId);
+  const directPropertyId = window.location.hash.match(/^#\/property\/([^/?#]+)$/)?.[1];
   const { data } = await wrcDb.auth.getSession();
   await setWrcManagementSession(data.session);
   await loadStock();
+  if (directPropertyId) window.detail(decodeURIComponent(directPropertyId), false);
 }
 
 async function setWrcManagementSession(session) {
