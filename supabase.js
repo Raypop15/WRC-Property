@@ -7,6 +7,10 @@ let wrcQueuedPhotos = [];
 let wrcEditingProperty = null;
 let wrcPreserveEditMode = false;
 let wrcPasswordRecoveryActive = false;
+let wrcExistingPhotos = [];
+let wrcCoverPhotoId = null;
+let wrcCoverPhotoKey = null;
+const wrcPhotoPreviews = new Map();
 
 const notice = (message, type = 'success') => {
   const el = document.querySelector('.success');
@@ -61,7 +65,7 @@ async function loadStock() {
 
   let query = wrcDb
     .from('properties')
-    .select('*, property_photos(url, sort_order)')
+    .select('*, property_photos(id, url, sort_order)')
     .order('date_added', { ascending: false });
   const { data, error } = await query;
   if (error) {
@@ -167,6 +171,51 @@ function propertyTypeChoices(category, selected = '') {
   return `<option value="">Select property type</option>${groups.map(([label, types]) => `<optgroup label="${label}">${types.map(type => `<option value="${type}" ${selected === type ? 'selected' : ''}>${type}</option>`).join('')}</optgroup>`).join('')}`;
 }
 
+function photoFileKey(file) {
+  return `${file.name}-${file.size}-${file.lastModified}`;
+}
+
+function clearPhotoPreviews() {
+  wrcPhotoPreviews.forEach(url => URL.revokeObjectURL(url));
+  wrcPhotoPreviews.clear();
+}
+
+function previewUrl(file) {
+  const key = photoFileKey(file);
+  if (!wrcPhotoPreviews.has(key)) wrcPhotoPreviews.set(key, URL.createObjectURL(file));
+  return wrcPhotoPreviews.get(key);
+}
+
+function renderPhotoPicker() {
+  const queue = document.getElementById('photoQueue');
+  if (!queue) return;
+  if (!wrcCoverPhotoId && !wrcCoverPhotoKey) {
+    wrcCoverPhotoId = wrcExistingPhotos[0]?.id || null;
+    wrcCoverPhotoKey = wrcCoverPhotoId ? null : (wrcQueuedPhotos[0] ? photoFileKey(wrcQueuedPhotos[0]) : null);
+  }
+  const existingTiles = wrcExistingPhotos.map(photo => `<label class="photo-cover-option ${wrcCoverPhotoId === photo.id ? 'selected' : ''}"><input type="radio" name="coverPhoto" ${wrcCoverPhotoId === photo.id ? 'checked' : ''} onchange="selectCoverPhoto('existing','${photo.id}')"><span class="photo-cover-image" style="background-image:url('${photo.url}')"></span><span>${wrcCoverPhotoId === photo.id ? 'Cover photo' : 'Use as cover'}</span></label>`).join('');
+  const newTiles = wrcQueuedPhotos.map((file, index) => {
+    const selected = wrcCoverPhotoKey === photoFileKey(file);
+    return `<label class="photo-cover-option ${selected ? 'selected' : ''}"><input type="radio" name="coverPhoto" ${selected ? 'checked' : ''} onchange="selectCoverPhoto('new','${index}')"><span class="photo-cover-image" style="background-image:url('${previewUrl(file)}')"></span><span>${selected ? 'Cover photo' : 'Use as cover'}</span></label>`;
+  }).join('');
+  const tiles = `${existingTiles}${newTiles}`;
+  queue.innerHTML = tiles
+    ? `<p class="photo-cover-help">Click an image to set the cover photo. It will show first on the listing.</p><div class="photo-cover-grid">${tiles}</div>`
+    : 'No photos added yet';
+}
+
+window.selectCoverPhoto = function selectCoverPhoto(kind, value) {
+  if (kind === 'existing') {
+    wrcCoverPhotoId = value;
+    wrcCoverPhotoKey = null;
+  } else {
+    const file = wrcQueuedPhotos[Number(value)];
+    wrcCoverPhotoKey = file ? photoFileKey(file) : null;
+    wrcCoverPhotoId = null;
+  }
+  renderPhotoPicker();
+};
+
 function enhancePropertyForm() {
   const grid = document.querySelector('.form-grid');
   const upload = document.querySelector('.upload');
@@ -189,14 +238,15 @@ function enhancePropertyForm() {
     typeControl.dataset.wrcChoicesBound = 'true';
   }
   if (!document.getElementById('propertyPhotos')) {
-    upload.innerHTML = `<label for="propertyPhotos" style="cursor:pointer">↑ &nbsp; Add property photos<br><small>JPG, PNG or WEBP · Add more photos any time before saving</small></label><input id="propertyPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"><div id="photoQueue" style="margin-top:12px;font-size:12px;color:var(--ink)">No photos added yet</div>`;
+    upload.innerHTML = `<label for="propertyPhotos" style="cursor:pointer">↑ &nbsp; Add property photos<br><small>JPG, PNG or WEBP · Add more photos any time before saving</small></label><input id="propertyPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"><div id="photoQueue" class="photo-queue">No photos added yet</div>`;
     document.getElementById('propertyPhotos').addEventListener('change', event => {
       const newFiles = [...event.target.files];
-      const seen = new Set(wrcQueuedPhotos.map(file => `${file.name}-${file.size}-${file.lastModified}`));
-      wrcQueuedPhotos.push(...newFiles.filter(file => !seen.has(`${file.name}-${file.size}-${file.lastModified}`)));
-      document.getElementById('photoQueue').textContent = `${wrcQueuedPhotos.length} ${wrcQueuedPhotos.length === 1 ? 'photo' : 'photos'} ready to upload`;
+      const seen = new Set(wrcQueuedPhotos.map(photoFileKey));
+      wrcQueuedPhotos.push(...newFiles.filter(file => !seen.has(photoFileKey(file))));
       event.target.value = '';
+      renderPhotoPicker();
     });
+    renderPhotoPicker();
   }
   if (!document.getElementById('wrcExtraFields')) {
     grid.insertAdjacentHTML('beforeend', `<div id="wrcExtraFields" class="form-field"><label>Tenure</label><input placeholder="e.g. Freehold"></div><div class="form-field"><label>Furnishing</label><select><option>Unfurnished</option><option>Partly Furnished</option><option>Fully Furnished</option><option>Bare Unit</option></select></div><div class="form-field full"><label>Internal Remarks</label><textarea placeholder="Owner details, viewing notes or internal-only information"></textarea></div>`);
@@ -207,7 +257,11 @@ const staticPropertyForm = window.propertyForm;
 window.propertyForm = function propertyFormWithDatabase() {
   if (!wrcSession) return renderSignIn();
   if (!wrcPreserveEditMode) wrcEditingProperty = null;
+  clearPhotoPreviews();
   wrcQueuedPhotos = [];
+  wrcExistingPhotos = [...(wrcEditingProperty?.property_photos || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  wrcCoverPhotoId = wrcExistingPhotos[0]?.id || null;
+  wrcCoverPhotoKey = null;
   staticPropertyForm();
   enhancePropertyForm();
 };
@@ -274,7 +328,7 @@ function setFieldValue(label, value) {
 }
 
 window.editListing = async function editListing(propertyDbId) {
-  const { data, error } = await wrcDb.from('properties').select('*').eq('id', propertyDbId).single();
+  const { data, error } = await wrcDb.from('properties').select('*, property_photos(id, url, sort_order)').eq('id', propertyDbId).single();
   if (error) return alert(error.message);
   wrcEditingProperty = data;
   wrcPreserveEditMode = true;
@@ -318,6 +372,7 @@ window.hideListing = async function hideListing(propertyDbId, propertyName) {
 
 async function uploadPhotos(propertyDbId, files) {
   const photoRows = [];
+  const uploadedFiles = [];
   const { data: existingPhotos } = await wrcDb.from('property_photos').select('sort_order').eq('property_id', propertyDbId).order('sort_order', { ascending: false }).limit(1);
   const firstSortOrder = (existingPhotos?.[0]?.sort_order ?? -1) + 1;
   for (const [index, file] of [...files].entries()) {
@@ -327,11 +382,36 @@ async function uploadPhotos(propertyDbId, files) {
     if (error) throw error;
     const { data } = wrcDb.storage.from('property-photos').getPublicUrl(path);
     photoRows.push({ property_id: propertyDbId, storage_path: path, url: data.publicUrl, sort_order: firstSortOrder + index });
+    uploadedFiles.push({ key: photoFileKey(file), path });
   }
   if (photoRows.length) {
-    const { error } = await wrcDb.from('property_photos').insert(photoRows);
+    const { data, error } = await wrcDb.from('property_photos').insert(photoRows).select('id, storage_path');
     if (error) throw error;
+    const idsByPath = new Map((data || []).map(photo => [photo.storage_path, photo.id]));
+    return new Map(uploadedFiles.map(photo => [photo.key, idsByPath.get(photo.path)]));
   }
+  return new Map();
+}
+
+async function setCoverPhoto(propertyDbId, coverPhotoId) {
+  if (!coverPhotoId) return;
+  const { data: allPhotos, error } = await wrcDb
+    .from('property_photos')
+    .select('id, sort_order')
+    .eq('property_id', propertyDbId)
+    .order('sort_order');
+  if (error) throw error;
+  const orderedPhotos = [
+    ...(allPhotos || []).filter(photo => photo.id === coverPhotoId),
+    ...(allPhotos || []).filter(photo => photo.id !== coverPhotoId)
+  ];
+  await Promise.all(orderedPhotos.map((photo, index) => (
+    photo.sort_order === index
+      ? Promise.resolve()
+      : wrcDb.from('property_photos').update({ sort_order: index }).eq('id', photo.id).then(({ error: updateError }) => {
+        if (updateError) throw updateError;
+      })
+  )));
 }
 
 async function saveProperty() {
@@ -361,7 +441,9 @@ async function saveProperty() {
   const { data, error } = result;
   if (error) throw error;
   const files = wrcQueuedPhotos.length ? wrcQueuedPhotos : (document.getElementById('propertyPhotos')?.files || []);
-  await uploadPhotos(data.id, files);
+  const uploadedPhotoIds = await uploadPhotos(data.id, files);
+  const selectedCoverPhotoId = wrcCoverPhotoId || uploadedPhotoIds.get(wrcCoverPhotoKey);
+  await setCoverPhoto(data.id, selectedCoverPhotoId);
   return data;
 }
 
