@@ -392,14 +392,21 @@ async function startWrc() {
   const sharedId = window.location.hash.match(/^#\/shortlist\/([\w-]+)$/)?.[1];
   if (sharedId) return loadPublicShortlist(sharedId);
   const { data } = await wrcDb.auth.getSession();
-  wrcSession = data.session;
-  window.wrcSession = wrcSession;
+  await setWrcManagementSession(data.session);
   await loadStock();
 }
 
-wrcDb?.auth.onAuthStateChange(async (_event, session) => {
+async function setWrcManagementSession(session) {
   wrcSession = session;
-  window.wrcSession = session;
-  if (session) await loadStock();
+  if (session) {
+    const { data, error } = await wrcDb.rpc('is_wrc_agent');
+    if (error || data !== true) wrcSession = null;
+  }
+  window.wrcSession = wrcSession;
+}
+
+wrcDb?.auth.onAuthStateChange(async (_event, session) => {
+  await setWrcManagementSession(session);
+  await loadStock();
 });
 startWrc();
