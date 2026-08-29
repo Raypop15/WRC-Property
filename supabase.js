@@ -6,6 +6,7 @@ let wrcSession = null;
 let wrcQueuedPhotos = [];
 let wrcEditingProperty = null;
 let wrcPreserveEditMode = false;
+let wrcPasswordRecoveryActive = false;
 
 const notice = (message, type = 'success') => {
   const el = document.querySelector('.success');
@@ -119,6 +120,8 @@ async function updatePassword(event) {
   if (password !== confirmation) return notice('The passwords do not match.', 'error');
   const { error } = await wrcDb.auth.updateUser({ password });
   if (error) return notice(error.message, 'error');
+  wrcPasswordRecoveryActive = false;
+  history.replaceState({}, '', `${window.location.pathname}${window.location.search}`);
   const { data } = await wrcDb.auth.getSession();
   await setWrcManagementSession(data.session);
   if (!wrcSession) {
@@ -428,6 +431,11 @@ window.shortlist = async function createShareableShortlist() {
 
 async function startWrc() {
   if (!wrcDb) return;
+  if (/(?:^#|[&#])type=recovery(?:&|$)/.test(window.location.hash)) {
+    wrcPasswordRecoveryActive = true;
+    renderSetPassword();
+    return;
+  }
   const sharedId = window.location.hash.match(/^#\/shortlist\/([\w-]+)$/)?.[1];
   if (sharedId) return loadPublicShortlist(sharedId);
   const { data } = await wrcDb.auth.getSession();
@@ -446,11 +454,13 @@ async function setWrcManagementSession(session) {
 
 wrcDb?.auth.onAuthStateChange(async (event, session) => {
   if (event === 'PASSWORD_RECOVERY') {
+    wrcPasswordRecoveryActive = true;
     wrcSession = null;
     window.wrcSession = null;
     renderSetPassword();
     return;
   }
+  if (wrcPasswordRecoveryActive) return;
   await setWrcManagementSession(session);
   await loadStock();
 });
