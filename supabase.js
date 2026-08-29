@@ -308,6 +308,11 @@ function renderPropertyUnavailable() {
   app.innerHTML = `<main>${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>This listing is unavailable.</h1><p>It may no longer be available or the link is incorrect.</p></div></div></main>${footer()}`;
 }
 
+function renderDirectPropertyRoute() {
+  const directPropertyId = window.location.hash.match(/^#\/property\/([^/?#]+)$/)?.[1];
+  if (directPropertyId) window.detail(decodeURIComponent(directPropertyId), false);
+}
+
 window.sharePropertyLink = async function sharePropertyLink(id) {
   const link = listingLink(id);
   try { await navigator.clipboard.writeText(link); } catch (_) { /* Clipboard permission is optional. */ }
@@ -585,11 +590,10 @@ async function startWrc() {
   }
   const sharedId = window.location.hash.match(/^#\/shortlist\/([\w-]+)$/)?.[1];
   if (sharedId) return loadPublicShortlist(sharedId);
-  const directPropertyId = window.location.hash.match(/^#\/property\/([^/?#]+)$/)?.[1];
   const { data } = await wrcDb.auth.getSession();
   await setWrcManagementSession(data.session);
   await loadStock();
-  if (directPropertyId) window.detail(decodeURIComponent(directPropertyId), false);
+  renderDirectPropertyRoute();
 }
 
 async function setWrcManagementSession(session) {
@@ -612,5 +616,6 @@ wrcDb?.auth.onAuthStateChange(async (event, session) => {
   if (wrcPasswordRecoveryActive) return;
   await setWrcManagementSession(session);
   await loadStock();
+  renderDirectPropertyRoute();
 });
 startWrc();
