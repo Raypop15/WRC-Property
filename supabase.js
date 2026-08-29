@@ -355,6 +355,43 @@ window.sharePropertyLink = async function sharePropertyLink(id) {
   alert(`Listing link copied. You can now send it to your client:\n${link}`);
 };
 
+function socialShareText(property) {
+  return `${property.name} · ${property.location} · ${fmt(property.price)}${property.deal === 'Rent' ? ' / month' : ''}`;
+}
+
+window.sharePropertySocial = function sharePropertySocial(id) {
+  const property = properties.find(item => item.id === id);
+  const aside = document.querySelector('.detail-aside');
+  if (!property || !aside) return;
+  const existingPanel = document.getElementById('socialSharePanel');
+  if (existingPanel) {
+    existingPanel.remove();
+    return;
+  }
+  const link = listingLink(id);
+  const shareText = socialShareText(property);
+  const nativeShare = navigator.share
+    ? `<button class="social-share-btn" type="button" onclick="nativeShareListing('${id}')">More apps</button>`
+    : '';
+  aside.insertAdjacentHTML('beforeend', `<div id="socialSharePanel" class="social-share-panel"><div class="social-share-title">Share this listing</div><div class="social-share-actions"><a class="social-share-btn" href="https://wa.me/?text=${encodeURIComponent(`${shareText}\n${link}`)}" target="_blank" rel="noopener">WhatsApp</a><a class="social-share-btn" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}" target="_blank" rel="noopener">Facebook</a><a class="social-share-btn" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(link)}" target="_blank" rel="noopener">X</a>${nativeShare}<button class="social-share-btn" type="button" onclick="copyPropertyLinkForSocial('${id}','Instagram')">Instagram</button><button class="social-share-btn" type="button" onclick="copyPropertyLinkForSocial('${id}','TikTok')">TikTok</button><button class="social-share-btn" type="button" onclick="copyPropertyLinkForSocial('${id}','Xiao Hong Shu')">Xiao Hong Shu</button></div><p>Instagram, TikTok and Xiao Hong Shu use the copied link. On mobile, choose <b>More apps</b> to share directly with installed apps.</p></div>`);
+};
+
+window.nativeShareListing = async function nativeShareListing(id) {
+  const property = properties.find(item => item.id === id);
+  if (!property || !navigator.share) return;
+  try {
+    await navigator.share({ title: property.name, text: socialShareText(property), url: listingLink(id) });
+  } catch (error) {
+    if (error?.name !== 'AbortError') window.copyPropertyLinkForSocial(id, 'your social media app');
+  }
+};
+
+window.copyPropertyLinkForSocial = async function copyPropertyLinkForSocial(id, platform) {
+  const link = listingLink(id);
+  try { await navigator.clipboard.writeText(link); } catch (_) { /* Clipboard permission is optional. */ }
+  alert(`Listing link copied. Open ${platform} and paste it into your post or message.`);
+};
+
 window.detail = function publicDetail(id, updateUrl = true) {
   const property = properties.find(item => item.id === id);
   if (!property) return renderPropertyUnavailable();
@@ -362,7 +399,7 @@ window.detail = function publicDetail(id, updateUrl = true) {
   if (updateUrl && !window.wrcSharedMode) history.pushState({}, '', `#/property/${encodeURIComponent(id)}`);
   const aside = document.querySelector('.detail-aside');
   if (aside && !document.getElementById('sharePropertyLink')) {
-    aside.insertAdjacentHTML('beforeend', `<button id="sharePropertyLink" class="btn outline small" style="width:100%;margin-top:10px" onclick="sharePropertyLink('${id}')">Copy listing link</button>`);
+    aside.insertAdjacentHTML('beforeend', `<button id="sharePropertyLink" class="btn outline small" style="width:100%;margin-top:10px" onclick="sharePropertyLink('${id}')">Copy listing link</button><button class="btn outline small" style="width:100%;margin-top:10px" onclick="sharePropertySocial('${id}')">Share to social media</button>`);
   }
   if (wrcSession) addListingControls(id);
 };
