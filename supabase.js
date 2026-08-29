@@ -77,18 +77,57 @@ function renderDatabaseSetup(errorMessage) {
 }
 
 function renderSignIn() {
-  app.innerHTML = `${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>Internal property stock.</h1><p>Sign in to manage listings, requirements and private shortlists.</p></div></div><main class="shell"><form class="form-wrap" style="max-width:520px" onsubmit="sendMagicLink(event)"><h2>Agent sign in</h2><p>We will email you a secure sign-in link.</p><div class="form-field"><label>Work email</label><input id="agentEmail" type="email" required placeholder="you@company.com"></div><button class="btn gold" style="margin-top:22px">Email me a sign-in link</button><div class="success"></div></form></main>${footer()}`;
+  app.innerHTML = `${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>Internal property stock.</h1><p>Sign in to manage listings, requirements and private shortlists.</p></div></div><main class="shell"><form class="form-wrap" style="max-width:520px" onsubmit="signInWithPassword(event)"><h2>Agent sign in</h2><p>Use your approved WRC email and password.</p><div class="form-field"><label>Work email</label><input id="agentEmail" type="email" required autocomplete="email" placeholder="you@company.com"></div><div class="form-field"><label>Password</label><input id="agentPassword" type="password" required minlength="8" autocomplete="current-password" placeholder="Your password"></div><button class="btn gold" style="margin-top:22px">Sign in</button><button class="link-btn" type="button" style="display:block;margin:18px 0 0" onclick="sendPasswordReset()">Set or reset password</button><div class="success"></div></form></main>${footer()}`;
 }
 
-async function sendMagicLink(event) {
+async function signInWithPassword(event) {
   event.preventDefault();
   const email = document.getElementById('agentEmail').value.trim();
-  const { error } = await wrcDb.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}` }
+  const password = document.getElementById('agentPassword').value;
+  const { data, error } = await wrcDb.auth.signInWithPassword({ email, password });
+  if (error) notice(error.message, 'error');
+  else {
+    await setWrcManagementSession(data.session);
+    if (!wrcSession) {
+      await wrcDb.auth.signOut();
+      renderSignIn();
+      notice('This email is not approved for WRC Property management.', 'error');
+      return;
+    }
+    await loadStock();
+  }
+}
+
+async function sendPasswordReset() {
+  const email = document.getElementById('agentEmail')?.value.trim();
+  if (!email) return notice('Enter your work email first, then choose Set or reset password.', 'error');
+  const { error } = await wrcDb.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}${window.location.pathname}`
   });
   if (error) notice(error.message, 'error');
-  else notice('Check your email for your secure WRC Property sign-in link.');
+  else notice('Check your email to set or reset your password.');
+}
+
+function renderSetPassword() {
+  app.innerHTML = `${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>Create your password.</h1><p>Choose a password for your WRC Property management account.</p></div></div><main class="shell"><form class="form-wrap" style="max-width:520px" onsubmit="updatePassword(event)"><h2>Set password</h2><div class="form-field"><label>New password</label><input id="newPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></div><div class="form-field"><label>Confirm password</label><input id="confirmPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="Repeat your password"></div><button class="btn gold" style="margin-top:22px">Save password</button><div class="success"></div></form></main>${footer()}`;
+}
+
+async function updatePassword(event) {
+  event.preventDefault();
+  const password = document.getElementById('newPassword').value;
+  const confirmation = document.getElementById('confirmPassword').value;
+  if (password !== confirmation) return notice('The passwords do not match.', 'error');
+  const { error } = await wrcDb.auth.updateUser({ password });
+  if (error) return notice(error.message, 'error');
+  const { data } = await wrcDb.auth.getSession();
+  await setWrcManagementSession(data.session);
+  if (!wrcSession) {
+    await wrcDb.auth.signOut();
+    renderSignIn();
+    return notice('This email is not approved for WRC Property management.', 'error');
+  }
+  await loadStock();
+  alert('Password saved. You are now signed in.');
 }
 
 function fieldValue(label) {
@@ -405,7 +444,13 @@ async function setWrcManagementSession(session) {
   window.wrcSession = wrcSession;
 }
 
-wrcDb?.auth.onAuthStateChange(async (_event, session) => {
+wrcDb?.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    wrcSession = null;
+    window.wrcSession = null;
+    renderSetPassword();
+    return;
+  }
   await setWrcManagementSession(session);
   await loadStock();
 });
