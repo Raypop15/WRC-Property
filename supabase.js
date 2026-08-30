@@ -23,6 +23,9 @@ const notice = (message, type = 'success') => {
 let wrcLanguage = (() => {
   try { return localStorage.getItem('wrc-language') === 'zh' ? 'zh' : 'en'; } catch (_) { return 'en'; }
 })();
+let wrcListingView = (() => {
+  try { return localStorage.getItem('wrc-listing-view') === 'list' ? 'list' : 'grid'; } catch (_) { return 'grid'; }
+})();
 const wrcOriginalTextNodes = new WeakMap();
 const wrcOriginalAttributes = new WeakMap();
 const WRC_ZH = {
@@ -70,6 +73,9 @@ const WRC_ZH = {
   'Max size': '最大面积',
   'Bedrooms': '卧室',
   'Reset': '重置',
+  'View': '查看方式',
+  'Grid': '网格',
+  'List': '列表',
   'Browse available WRC Property listings.': '浏览 WRC Property 可用房源。',
   'For Rent': '出租',
   'For Sale': '出售',
@@ -226,6 +232,31 @@ function scheduleWrcLanguage() {
   requestAnimationFrame(applyWrcLanguage);
 }
 
+function applyWrcListingView() {
+  const listingGrid = document.querySelector('.catalogue .listing-grid');
+  if (!listingGrid) return;
+  listingGrid.classList.toggle('list-view', wrcListingView === 'list');
+  document.querySelectorAll('[data-wrc-listing-view]').forEach(button => {
+    const selected = button.dataset.wrcListingView === wrcListingView;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+}
+
+function addWrcListingViewControl() {
+  const resultsHead = document.querySelector('.catalogue .results-head');
+  if (!resultsHead || document.getElementById('listingViewToolbar')) return;
+  resultsHead.insertAdjacentHTML('beforebegin', `<div id="listingViewToolbar" class="listing-view-toolbar"><span>View</span><button class="listing-view-button" type="button" data-wrc-listing-view="grid" onclick="setWrcListingView('grid')">▦ Grid</button><button class="listing-view-button" type="button" data-wrc-listing-view="list" onclick="setWrcListingView('list')">☰ List</button></div>`);
+  applyWrcListingView();
+}
+
+window.setWrcListingView = function setWrcListingView(view) {
+  wrcListingView = view === 'list' ? 'list' : 'grid';
+  try { localStorage.setItem('wrc-listing-view', wrcListingView); } catch (_) { /* Persistence is optional. */ }
+  applyWrcListingView();
+  scheduleWrcLanguage();
+};
+
 window.toggleWrcLanguage = function toggleWrcLanguage() {
   wrcLanguage = wrcLanguage === 'zh' ? 'en' : 'zh';
   try { localStorage.setItem('wrc-language', wrcLanguage); } catch (_) { /* Persistence is optional. */ }
@@ -288,7 +319,7 @@ async function loadStock() {
   }
   properties.splice(0, properties.length, ...data.map(propertyFromDb));
   state.selected.clear();
-  if (state.view === 'catalogue') renderCatalogue(); else home();
+  if (state.view === 'catalogue') renderPublicCatalogue(); else home();
   scheduleWrcLanguage();
   renderDirectPropertyRoute();
 }
@@ -526,6 +557,7 @@ function renderPublicCatalogue() {
     const note = document.querySelector('.results-head .note');
     if (note) note.textContent = 'Browse available WRC Property listings.';
   }
+  addWrcListingViewControl();
   scheduleWrcLanguage();
 }
 
@@ -548,6 +580,18 @@ window.home = function publicHome() {
 window.catalogue = function publicCatalogue(category) {
   state.view = 'catalogue';
   state.filter.category = category || '';
+  renderPublicCatalogue();
+};
+window.setFilter = function setPublicFilter(key, value) {
+  state.filter[key] = value;
+  renderPublicCatalogue();
+};
+window.clearFilters = function clearPublicFilters() {
+  state.filter = { category: state.filter.category, deal: '', type: '', location: '', minPrice: '', maxPrice: '', minSize: '', maxSize: '', beds: '' };
+  renderPublicCatalogue();
+};
+window.toggleSelected = function togglePublicSelected(id, selected) {
+  if (selected) state.selected.add(id); else state.selected.delete(id);
   renderPublicCatalogue();
 };
 function listingLink(id) {
