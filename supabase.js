@@ -5,11 +5,13 @@ const wrcDb = window.supabase?.createClient(WRC_SUPABASE_URL, WRC_SUPABASE_PUBLI
 let wrcSession = null;
 let wrcQueuedPhotos = [];
 let wrcQueuedVideos = [];
+let wrcQueuedDocuments = [];
 let wrcEditingProperty = null;
 let wrcPreserveEditMode = false;
 let wrcPasswordRecoveryActive = false;
 let wrcExistingPhotos = [];
 let wrcExistingVideos = [];
+let wrcExistingDocuments = [];
 let wrcCoverPhotoId = null;
 let wrcCoverPhotoKey = null;
 const wrcPhotoPreviews = new Map();
@@ -280,6 +282,10 @@ function propertyFromDb(row) {
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
     .map(video => video.url)
     .filter(Boolean);
+  const documents = (row.property_documents || [])
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    .filter(document => document.url)
+    .map(document => ({ name: document.file_name || 'Listing document', url: document.url }));
   return {
     id: row.property_id,
     dbId: row.id,
@@ -303,6 +309,7 @@ function propertyFromDb(row) {
     description: row.description || '',
     photos: photos.length ? photos : ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1100&q=85'],
     videos,
+    documents,
     date: row.date_added || ''
   };
 }
@@ -324,7 +331,7 @@ async function loadStock() {
 
   let query = wrcDb
     .from('properties')
-    .select('*, property_photos(id, url, sort_order), property_videos(id, url, sort_order, duration_seconds)')
+    .select('*, property_photos(id, url, sort_order), property_videos(id, url, sort_order, duration_seconds), property_documents(id, url, file_name, sort_order)')
     .order('date_added', { ascending: false });
   const { data, error } = await query;
   if (error) {
@@ -481,6 +488,33 @@ function renderVideoPicker() {
     : 'No videos added yet';
 }
 
+function renderDocumentPicker() {
+  const queue = document.getElementById('documentQueue');
+  if (!queue) return;
+  const existing = wrcExistingDocuments.map(document => `<span class="document-queue-item">PDF · ${document.file_name || 'Uploaded document'}</span>`).join('');
+  const queued = wrcQueuedDocuments.map(file => `<span class="document-queue-item">PDF · ${file.name}</span>`).join('');
+  queue.innerHTML = existing || queued
+    ? `<div class="document-queue-list">${existing}${queued}</div>`
+    : 'No PDF documents added yet';
+}
+
+function addPropertyDocuments(files) {
+  const seen = new Set(wrcQueuedDocuments.map(photoFileKey));
+  const messages = [];
+  for (const file of files) {
+    if (seen.has(photoFileKey(file))) continue;
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!isPdf) {
+      messages.push(`${file.name}: only PDF files can be added here.`);
+      continue;
+    }
+    wrcQueuedDocuments.push(file);
+    seen.add(photoFileKey(file));
+  }
+  if (messages.length) alert(messages.join('\n'));
+  renderDocumentPicker();
+}
+
 function getVideoDuration(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -561,7 +595,7 @@ function enhancePropertyForm() {
     typeControl.dataset.wrcChoicesBound = 'true';
   }
   if (!document.getElementById('propertyPhotos')) {
-    upload.innerHTML = `<div class="media-upload-section"><label for="propertyPhotos" style="cursor:pointer">↑ &nbsp; Add property photos<br><small>JPG, PNG or WEBP · Add more photos any time before saving</small></label><input id="propertyPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"><div id="photoQueue" class="photo-queue">No photos added yet</div></div><div class="media-upload-section video-upload-section"><label for="propertyVideos" style="cursor:pointer">▶ &nbsp; Add property videos<br><small>MP4, MOV or WEBM · Up to 2 minutes per video</small></label><input id="propertyVideos" type="file" accept="video/mp4,video/quicktime,video/webm" multiple style="display:none"><div id="videoQueue" class="video-queue">No videos added yet</div></div>`;
+    upload.innerHTML = `<div class="media-upload-section"><label for="propertyPhotos" style="cursor:pointer">↑ &nbsp; Add property photos<br><small>JPG, PNG or WEBP · Add more photos any time before saving</small></label><input id="propertyPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"><div id="photoQueue" class="photo-queue">No photos added yet</div></div><div class="media-upload-section video-upload-section"><label for="propertyVideos" style="cursor:pointer">▶ &nbsp; Add property videos<br><small>MP4, MOV or WEBM · Up to 2 minutes per video</small></label><input id="propertyVideos" type="file" accept="video/mp4,video/quicktime,video/webm" multiple style="display:none"><div id="videoQueue" class="video-queue">No videos added yet</div></div><div class="media-upload-section document-upload-section"><label for="propertyDocuments" style="cursor:pointer">↓ &nbsp; Add listing documents<br><small>PDF only · Brochures, floor plans, unit lists or pricing sheets</small></label><input id="propertyDocuments" type="file" accept="application/pdf,.pdf" multiple style="display:none"><div id="documentQueue" class="document-queue">No PDF documents added yet</div></div>`;
     document.getElementById('propertyPhotos').addEventListener('change', event => {
       const newFiles = [...event.target.files];
       const seen = new Set(wrcQueuedPhotos.map(photoFileKey));
@@ -574,8 +608,14 @@ function enhancePropertyForm() {
       event.target.value = '';
       await addPropertyVideos(newFiles);
     });
+    document.getElementById('propertyDocuments').addEventListener('change', event => {
+      const newFiles = [...event.target.files];
+      event.target.value = '';
+      addPropertyDocuments(newFiles);
+    });
     renderPhotoPicker();
     renderVideoPicker();
+    renderDocumentPicker();
   }
   if (!document.getElementById('wrcExtraFields')) {
     grid.insertAdjacentHTML('beforeend', `<div id="wrcExtraFields" class="form-field"><label>Tenure</label><select><option value="">Select tenure</option><option>Freehold</option><option>Leasehold</option></select></div><div class="form-field"><label>Furnishing</label><select><option>Unfurnished</option><option>Partly Furnished</option><option>Fully Furnished</option><option>Bare Unit</option></select></div><div class="form-field full"><label>Internal Remarks</label><textarea placeholder="Owner details, viewing notes or internal-only information"></textarea></div>`);
@@ -677,8 +717,10 @@ window.propertyForm = function propertyFormWithDatabase() {
   clearPhotoPreviews();
   wrcQueuedPhotos = [];
   wrcQueuedVideos = [];
+  wrcQueuedDocuments = [];
   wrcExistingPhotos = [...(wrcEditingProperty?.property_photos || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   wrcExistingVideos = [...(wrcEditingProperty?.property_videos || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  wrcExistingDocuments = [...(wrcEditingProperty?.property_documents || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   wrcCoverPhotoId = wrcExistingPhotos[0]?.id || null;
   wrcCoverPhotoKey = null;
   staticPropertyForm();
@@ -835,11 +877,24 @@ function addGalleryVideos(property) {
   thumbs.insertAdjacentHTML('beforeend', property.videos.map(video => `<button class="gallery-video-thumb" type="button" onclick="changeGalleryVideo('${video}', this)"><span>▶</span> Video</button>`).join(''));
 }
 
+function documentDownloadUrl(document) {
+  const separator = document.url.includes('?') ? '&' : '?';
+  return `${document.url}${separator}download=${encodeURIComponent(document.name)}`;
+}
+
+function addListingDocuments(property) {
+  if (!property.documents?.length || document.getElementById('listingDocuments')) return;
+  const detailCopy = document.querySelector('.detail-copy');
+  if (!detailCopy) return;
+  detailCopy.insertAdjacentHTML('afterend', `<section id="listingDocuments" class="listing-documents"><h2>Listing documents</h2><p>Download brochures, floor plans, unit lists or other information for this property.</p><div class="document-downloads">${property.documents.map(document => `<a class="document-download" href="${documentDownloadUrl(document)}" target="_blank" rel="noopener" download><span>PDF</span><strong>${document.name}</strong><b>Download ↓</b></a>`).join('')}</div></section>`);
+}
+
 window.detail = function publicDetail(id, updateUrl = true) {
   const property = properties.find(item => item.id === id);
   if (!property) return renderPropertyUnavailable();
   staticDetail(id);
   addGalleryVideos(property);
+  addListingDocuments(property);
   if (updateUrl && !window.wrcSharedMode) history.pushState({}, '', `#/property/${encodeURIComponent(id)}`);
   const aside = document.querySelector('.detail-aside');
   if (aside && !document.getElementById('sharePropertyLink')) {
@@ -893,7 +948,7 @@ function setFieldValue(label, value) {
 }
 
 window.editListing = async function editListing(propertyDbId) {
-  const { data, error } = await wrcDb.from('properties').select('*, property_photos(id, url, sort_order), property_videos(id, url, sort_order, duration_seconds)').eq('id', propertyDbId).single();
+  const { data, error } = await wrcDb.from('properties').select('*, property_photos(id, url, sort_order), property_videos(id, url, sort_order, duration_seconds), property_documents(id, url, file_name, sort_order)').eq('id', propertyDbId).single();
   if (error) return alert(error.message);
   wrcEditingProperty = data;
   wrcPreserveEditMode = true;
@@ -976,6 +1031,23 @@ async function uploadVideos(propertyDbId, files) {
   if (error) throw error;
 }
 
+async function uploadDocuments(propertyDbId, files) {
+  if (!files.length) return;
+  const { data: existingDocuments } = await wrcDb.from('property_documents').select('sort_order').eq('property_id', propertyDbId).order('sort_order', { ascending: false }).limit(1);
+  const firstSortOrder = (existingDocuments?.[0]?.sort_order ?? -1) + 1;
+  const documentRows = [];
+  for (const [index, file] of [...files].entries()) {
+    const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, '-');
+    const path = `${propertyDbId}/documents/${Date.now()}-${index}-${safeName}`;
+    const { error } = await wrcDb.storage.from('property-documents').upload(path, file, { cacheControl: '3600', upsert: false });
+    if (error) throw error;
+    const { data } = wrcDb.storage.from('property-documents').getPublicUrl(path);
+    documentRows.push({ property_id: propertyDbId, storage_path: path, url: data.publicUrl, file_name: file.name, sort_order: firstSortOrder + index });
+  }
+  const { error } = await wrcDb.from('property_documents').insert(documentRows);
+  if (error) throw error;
+}
+
 async function setCoverPhoto(propertyDbId, coverPhotoId) {
   if (!coverPhotoId) return;
   const { data: allPhotos, error } = await wrcDb
@@ -1029,6 +1101,7 @@ async function saveProperty() {
   const selectedCoverPhotoId = wrcCoverPhotoId || uploadedPhotoIds.get(wrcCoverPhotoKey);
   await setCoverPhoto(data.id, selectedCoverPhotoId);
   await uploadVideos(data.id, wrcQueuedVideos);
+  await uploadDocuments(data.id, wrcQueuedDocuments);
   return data;
 }
 
@@ -1065,6 +1138,7 @@ document.addEventListener('submit', async event => {
       clearPropertyDraft();
       wrcQueuedPhotos = [];
       wrcQueuedVideos = [];
+      wrcQueuedDocuments = [];
       wrcEditingProperty = null;
       await loadStock();
       window.detail(savedProperty.property_id);
@@ -1104,7 +1178,8 @@ function sharedPropertyFromRpc(record) {
     highlights: row.highlights || [],
     description: row.description || '',
     photos: row.photos?.length ? row.photos : ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1100&q=85'],
-    videos: row.videos || []
+    videos: row.videos || [],
+    documents: row.documents || []
   };
 }
 
