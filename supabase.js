@@ -152,6 +152,9 @@ const WRC_ZH = {
   'Phone': '电话',
   'Additional requirements': '其他需求',
   'Submit requirement →': '提交需求 →',
+  'Draft saved automatically on this device.': '此设备已自动保存草稿。',
+  'Draft restored. Please choose photos again if the page refreshed.': '草稿已恢复。如页面曾刷新，请重新选择照片。',
+  'Discard saved draft': '删除已保存草稿',
   'Private property collection': '私人房源精选',
   'Selected for you': '为您精选',
   'Enquire via WhatsApp': '通过 WhatsApp 咨询',
@@ -526,6 +529,59 @@ function setAutomaticPropertyId() {
   input.title = 'This property ID is assigned automatically.';
 }
 
+const WRC_PROPERTY_DRAFT_KEY = 'wrc-property-draft-v1';
+
+function propertyDraftFieldKey(field) {
+  const label = field.querySelector('label');
+  return label?.dataset.wrcFieldKey || label?.textContent.trim();
+}
+
+function savePropertyDraft() {
+  if (wrcEditingProperty?.id) return;
+  const form = document.querySelector('.form-wrap');
+  if (!form) return;
+  const fields = {};
+  form.querySelectorAll('.form-field').forEach(field => {
+    const key = propertyDraftFieldKey(field);
+    const control = field.querySelector('input:not([type="file"]), select, textarea');
+    if (key && control) fields[key] = control.value;
+  });
+  try {
+    localStorage.setItem(WRC_PROPERTY_DRAFT_KEY, JSON.stringify({ fields, savedAt: Date.now() }));
+    const notice = document.getElementById('propertyDraftNotice');
+    if (notice) notice.textContent = 'Draft saved automatically on this device.';
+  } catch (_) { /* Draft saving is optional when browser storage is unavailable. */ }
+}
+
+function restorePropertyDraft() {
+  if (wrcEditingProperty?.id) return false;
+  let draft;
+  try { draft = JSON.parse(localStorage.getItem(WRC_PROPERTY_DRAFT_KEY) || 'null'); } catch (_) { return false; }
+  if (!draft?.fields) return false;
+  if (draft.fields.Category) setFieldValue('Category', draft.fields.Category);
+  Object.entries(draft.fields).forEach(([label, value]) => setFieldValue(label, value));
+  return true;
+}
+
+function clearPropertyDraft() {
+  try { localStorage.removeItem(WRC_PROPERTY_DRAFT_KEY); } catch (_) { /* Draft clearing is optional. */ }
+}
+
+function enablePropertyDrafts() {
+  if (wrcEditingProperty?.id) return;
+  const form = document.querySelector('.form-wrap');
+  if (!form || document.getElementById('propertyDraftNotice')) return;
+  const restored = restorePropertyDraft();
+  form.querySelector('h2')?.insertAdjacentHTML('afterend', `<div id="propertyDraftNotice" class="property-draft-notice">${restored ? 'Draft restored. Please choose photos again if the page refreshed.' : 'Draft saved automatically on this device.'} <button type="button" onclick="discardPropertyDraft()">Discard saved draft</button></div>`);
+  form.addEventListener('input', savePropertyDraft);
+  form.addEventListener('change', savePropertyDraft);
+}
+
+window.discardPropertyDraft = function discardPropertyDraft() {
+  clearPropertyDraft();
+  window.propertyForm();
+};
+
 const staticPropertyForm = window.propertyForm;
 window.propertyForm = function propertyFormWithDatabase() {
   if (!wrcSession) return renderSignIn();
@@ -538,6 +594,7 @@ window.propertyForm = function propertyFormWithDatabase() {
   staticPropertyForm();
   enhancePropertyForm();
   setAutomaticPropertyId();
+  enablePropertyDrafts();
   scheduleWrcLanguage();
 };
 
@@ -865,6 +922,7 @@ document.addEventListener('submit', async event => {
   try {
     if (heading.includes('Property information')) {
       const savedProperty = await saveProperty();
+      clearPropertyDraft();
       wrcQueuedPhotos = [];
       wrcEditingProperty = null;
       await loadStock();
