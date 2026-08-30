@@ -125,6 +125,8 @@ const WRC_ZH = {
   'Property name': '房源名称',
   'Location': '地点',
   'Price (RM)': '价格（RM）',
+  'Price per sq ft': '每平方英尺价格',
+  'Enter total price and built-up size to calculate.': '填写总价和建筑面积后自动计算。',
   'Status': '状态',
   'Available': '可用',
   'Reserved': '已预留',
@@ -273,6 +275,18 @@ window.toggleWrcLanguage = function toggleWrcLanguage() {
   applyWrcLanguage();
 };
 
+function pricePerSqFt(price, built) {
+  const totalPrice = Number(price || 0);
+  const builtUp = Number(built || 0);
+  return totalPrice > 0 && builtUp > 0 ? totalPrice / builtUp : null;
+}
+
+function formatPricePerSqFt(price, built, deal = '') {
+  const psf = pricePerSqFt(price, built);
+  if (!psf) return '';
+  return `RM ${psf.toLocaleString('en-MY', { maximumFractionDigits: 2 })} / sq ft${deal === 'Rent' ? ' / month' : ''}`;
+}
+
 function propertyFromDb(row) {
   const photos = (row.property_photos || [])
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
@@ -298,6 +312,7 @@ function propertyFromDb(row) {
     status: row.status,
     price: Number(row.price || 0),
     built: Number(row.built_up_size || 0),
+    pricePerSqFt: pricePerSqFt(row.price, row.built_up_size),
     land: row.land_size || '—',
     beds: row.bedrooms ?? '—',
     maidRooms: row.maid_rooms ?? null,
@@ -621,6 +636,43 @@ function enhancePropertyForm() {
     grid.insertAdjacentHTML('beforeend', `<div id="wrcExtraFields" class="form-field"><label>Tenure</label><select><option value="">Select tenure</option><option>Freehold</option><option>Leasehold</option></select></div><div class="form-field"><label>Furnishing</label><select><option>Unfurnished</option><option>Partly Furnished</option><option>Fully Furnished</option><option>Bare Unit</option></select></div><div class="form-field full"><label>Internal Remarks</label><textarea placeholder="Owner details, viewing notes or internal-only information"></textarea></div>`);
   }
   syncMaidRoomField(grid, categoryControl);
+  addPsfPreview(grid);
+}
+
+function propertyFormField(labelText) {
+  return [...document.querySelectorAll('.form-field')].find(field => {
+    const label = field.querySelector('label');
+    return (label?.dataset.wrcFieldKey || label?.textContent.trim()) === labelText;
+  });
+}
+
+function refreshPsfPreview() {
+  const preview = document.getElementById('wrcPsfValue');
+  if (!preview) return;
+  const price = propertyFormField('Price (RM)')?.querySelector('input')?.value;
+  const built = propertyFormField('Built-up size (sq ft)')?.querySelector('input')?.value;
+  const deal = propertyFormField('Sale / Rent')?.querySelector('select')?.value || '';
+  preview.textContent = formatPricePerSqFt(price, built, deal) || 'Enter total price and built-up size to calculate.';
+  preview.classList.toggle('has-value', Boolean(pricePerSqFt(price, built)));
+}
+
+function addPsfPreview(grid) {
+  let field = document.getElementById('wrcPsfField');
+  if (!field) {
+    const priceField = propertyFormField('Price (RM)');
+    const markup = `<div id="wrcPsfField" class="form-field psf-preview"><label data-wrc-field-key="Price per sq ft">Price per sq ft</label><output id="wrcPsfValue">Enter total price and built-up size to calculate.</output></div>`;
+    if (priceField) priceField.insertAdjacentHTML('afterend', markup);
+    else grid.insertAdjacentHTML('beforeend', markup);
+    field = document.getElementById('wrcPsfField');
+  }
+  if (!field?.dataset.wrcPsfBound) {
+    ['Price (RM)', 'Built-up size (sq ft)', 'Sale / Rent'].forEach(labelText => {
+      propertyFormField(labelText)?.querySelector('input, select')?.addEventListener('input', refreshPsfPreview);
+      propertyFormField(labelText)?.querySelector('input, select')?.addEventListener('change', refreshPsfPreview);
+    });
+    field.dataset.wrcPsfBound = 'true';
+  }
+  refreshPsfPreview();
 }
 
 function syncMaidRoomField(grid, categoryControl) {
@@ -703,6 +755,7 @@ function enablePropertyDrafts() {
   form.querySelector('h2')?.insertAdjacentHTML('afterend', `<div id="propertyDraftNotice" class="property-draft-notice">${restored ? 'Draft restored. Please choose photos again if the page refreshed.' : 'Draft saved automatically on this device.'} <button type="button" onclick="discardPropertyDraft()">Discard saved draft</button></div>`);
   form.addEventListener('input', savePropertyDraft);
   form.addEventListener('change', savePropertyDraft);
+  refreshPsfPreview();
 }
 
 window.discardPropertyDraft = function discardPropertyDraft() {
@@ -904,6 +957,9 @@ window.detail = function publicDetail(id, updateUrl = true) {
   if (property.category === 'Residential' && property.maidRooms !== null && property.maidRooms !== '' && propertyMeta && !document.getElementById('maidRoomMeta')) {
     propertyMeta.insertAdjacentHTML('beforeend', `<div id="maidRoomMeta">Maid / Utility Rooms</div><div>${property.maidRooms}</div>`);
   }
+  if (property.pricePerSqFt && propertyMeta && !document.getElementById('psfMeta')) {
+    propertyMeta.insertAdjacentHTML('afterbegin', `<div id="psfMeta">Price per sq ft</div><div>${formatPricePerSqFt(property.price, property.built, property.deal)}</div>`);
+  }
   if (wrcSession) addListingControls(id);
   scheduleWrcLanguage();
 };
@@ -976,6 +1032,7 @@ window.editListing = async function editListing(propertyDbId) {
   setFieldValue('Tenure', data.tenure);
   setFieldValue('Furnishing', data.furnishing);
   setFieldValue('Internal Remarks', data.internal_remarks);
+  refreshPsfPreview();
   const button = document.querySelector('.form-wrap button[type="submit"], .form-wrap button:not([type])');
   if (button) button.textContent = 'Update listing →';
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1168,6 +1225,7 @@ function sharedPropertyFromRpc(record) {
     status: row.status,
     price: Number(row.price || 0),
     built: Number(row.built_up_size || 0),
+    pricePerSqFt: pricePerSqFt(row.price, row.built_up_size),
     land: row.land_size || '—',
     beds: row.bedrooms ?? '—',
     maidRooms: row.maid_rooms ?? null,
