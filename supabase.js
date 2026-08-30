@@ -76,6 +76,8 @@ const WRC_ZH = {
   'View': '查看方式',
   'Grid': '网格',
   'List': '列表',
+  '▦ Grid': '▦ 网格',
+  '☰ List': '☰ 列表',
   'Browse available WRC Property listings.': '浏览 WRC Property 可用房源。',
   'For Rent': '出租',
   'For Sale': '出售',
