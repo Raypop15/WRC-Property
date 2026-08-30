@@ -344,7 +344,7 @@ window.card = function propertyCardWithPricePerSqFt(property, shortlist = false)
     : landPsf;
   return rendered.replace(
     '</div><div class="card-details">',
-    `<div class="card-psf">${psf}</div></div><div class="card-details">`
+    `</div><div class="card-psf">${psf}</div><div class="card-details">`
   );
 };
 
