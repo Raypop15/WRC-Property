@@ -129,6 +129,7 @@ const WRC_ZH = {
   'Hidden': '隐藏',
   'Built-up size (sq ft)': '建筑面积（平方英尺）',
   'Land size': '土地面积',
+  'Maid / Utility Rooms': '佣人房 / 杂物房',
   'Address': '地址',
   'Description': '描述',
   'Photos': '照片',
@@ -287,6 +288,7 @@ function propertyFromDb(row) {
     built: Number(row.built_up_size || 0),
     land: row.land_size || '—',
     beds: row.bedrooms ?? '—',
+    maidRooms: row.maid_rooms ?? null,
     baths: row.bathrooms ?? '—',
     tenure: row.tenure || '—',
     furnishing: row.furnishing || '—',
@@ -492,6 +494,8 @@ function enhancePropertyForm() {
     categoryControl.addEventListener('change', () => {
       const currentValue = typeControl.value;
       typeControl.innerHTML = propertyTypeChoices(categoryControl.value, currentValue);
+      syncMaidRoomField(grid, categoryControl);
+      scheduleWrcLanguage();
     });
     typeControl.dataset.wrcChoicesBound = 'true';
   }
@@ -509,6 +513,23 @@ function enhancePropertyForm() {
   if (!document.getElementById('wrcExtraFields')) {
     grid.insertAdjacentHTML('beforeend', `<div id="wrcExtraFields" class="form-field"><label>Tenure</label><input placeholder="e.g. Freehold"></div><div class="form-field"><label>Furnishing</label><select><option>Unfurnished</option><option>Partly Furnished</option><option>Fully Furnished</option><option>Bare Unit</option></select></div><div class="form-field full"><label>Internal Remarks</label><textarea placeholder="Owner details, viewing notes or internal-only information"></textarea></div>`);
   }
+  syncMaidRoomField(grid, categoryControl);
+}
+
+function syncMaidRoomField(grid, categoryControl) {
+  const existing = document.getElementById('wrcMaidRoomField');
+  if (categoryControl?.value !== 'Residential') {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const bathroomField = [...grid.querySelectorAll('.form-field')].find(field => {
+    const label = field.querySelector('label');
+    return (label?.dataset.wrcFieldKey || label?.textContent.trim()) === 'Bathrooms';
+  });
+  const markup = `<div id="wrcMaidRoomField" class="form-field"><label data-wrc-field-key="Maid / Utility Rooms">Maid / Utility Rooms</label><input type="number" min="0" step="1" placeholder="0"></div>`;
+  if (bathroomField) bathroomField.insertAdjacentHTML('afterend', markup);
+  else grid.insertAdjacentHTML('beforeend', markup);
 }
 
 function nextWrcPropertyId() {
@@ -729,6 +750,10 @@ window.detail = function publicDetail(id, updateUrl = true) {
   if (aside && !document.getElementById('sharePropertyLink')) {
     aside.insertAdjacentHTML('beforeend', `<button id="sharePropertyLink" class="btn outline small" style="width:100%;margin-top:10px" onclick="sharePropertyLink('${id}')">Copy listing link</button><button class="btn outline small" style="width:100%;margin-top:10px" onclick="sharePropertySocial('${id}')">Share to social media</button>`);
   }
+  const propertyMeta = document.querySelector('.property-meta');
+  if (property.category === 'Residential' && property.maidRooms !== null && property.maidRooms !== '' && propertyMeta && !document.getElementById('maidRoomMeta')) {
+    propertyMeta.insertAdjacentHTML('beforeend', `<div id="maidRoomMeta">Maid / Utility Rooms</div><div>${property.maidRooms}</div>`);
+  }
   if (wrcSession) addListingControls(id);
   scheduleWrcLanguage();
 };
@@ -794,6 +819,7 @@ window.editListing = async function editListing(propertyDbId) {
   setFieldValue('Land size', data.land_size);
   setFieldValue('Bedrooms', data.bedrooms);
   setFieldValue('Bathrooms', data.bathrooms);
+  setFieldValue('Maid / Utility Rooms', data.maid_rooms);
   setFieldValue('Address', data.address);
   setFieldValue('Highlights', (data.highlights || []).join(', '));
   setFieldValue('Description', data.description);
@@ -873,6 +899,7 @@ async function saveProperty() {
     built_up_size: optionalNumber(fieldValue('Built-up size (sq ft)')),
     land_size: fieldValue('Land size'),
     bedrooms: optionalNumber(fieldValue('Bedrooms')),
+    maid_rooms: fieldValue('Category') === 'Residential' ? optionalNumber(fieldValue('Maid / Utility Rooms')) : null,
     bathrooms: optionalNumber(fieldValue('Bathrooms')),
     tenure: fieldValue('Tenure'),
     furnishing: fieldValue('Furnishing'),
@@ -944,6 +971,7 @@ function sharedPropertyFromRpc(record) {
   const row = record.property || record;
   return {
     id: row.property_id,
+    category: row.category,
     type: row.property_type,
     name: row.property_name,
     location: row.location,
@@ -954,6 +982,7 @@ function sharedPropertyFromRpc(record) {
     built: Number(row.built_up_size || 0),
     land: row.land_size || '—',
     beds: row.bedrooms ?? '—',
+    maidRooms: row.maid_rooms ?? null,
     baths: row.bathrooms ?? '—',
     tenure: row.tenure || '—',
     furnishing: row.furnishing || '—',
