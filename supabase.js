@@ -126,7 +126,9 @@ const WRC_ZH = {
   'Location': '地点',
   'Price (RM)': '价格（RM）',
   'Price per sq ft': '每平方英尺价格',
+  'Land price per sq ft': '土地每平方英尺价格',
   'Enter total price and built-up size to calculate.': '填写总价和建筑面积后自动计算。',
+  'Enter total price and land size to calculate.': '填写总价和土地面积后自动计算。',
   'Status': '状态',
   'Available': '可用',
   'Reserved': '已预留',
@@ -287,11 +289,59 @@ function formatPricePerSqFt(price, built, deal = '') {
   return `RM ${psf.toLocaleString('en-MY', { maximumFractionDigits: 2 })} / sq ft${deal === 'Rent' ? ' / month' : ''}`;
 }
 
+const WRC_SQ_FT_PER_ACRE = 43560;
+
+function parseLandSize(landSize) {
+  const text = String(landSize || '').trim();
+  const value = Number(text.replace(/,/g, '').match(/[\d.]+/)?.[0] || 0);
+  const unit = /acre/i.test(text) ? 'acres' : 'sq ft';
+  return { value: Number.isFinite(value) ? value : 0, unit };
+}
+
+function formatLandSize(value, unit = 'sq ft') {
+  const number = Number(value || 0);
+  if (!(number > 0)) return '';
+  return `${number.toLocaleString('en-MY', { maximumFractionDigits: 4 })} ${unit === 'acres' ? 'acres' : 'sq ft'}`;
+}
+
+function landSizeInSqFt(value, unit = 'sq ft') {
+  const number = Number(value || 0);
+  if (!(number > 0)) return 0;
+  return unit === 'acres' ? number * WRC_SQ_FT_PER_ACRE : number;
+}
+
+function pricePerLandSqFt(price, landSize, unit = 'sq ft') {
+  const totalPrice = Number(price || 0);
+  const landSqFt = landSizeInSqFt(landSize, unit);
+  return totalPrice > 0 && landSqFt > 0 ? totalPrice / landSqFt : null;
+}
+
+function formatPricePerLandSqFt(price, landSize, unit = 'sq ft', deal = '') {
+  const psf = pricePerLandSqFt(price, landSize, unit);
+  if (!psf) return '';
+  return `RM ${psf.toLocaleString('en-MY', { maximumFractionDigits: 2 })} / sq ft${deal === 'Rent' ? ' / month' : ''}`;
+}
+
+function landInfoFromRow(row) {
+  const parsed = parseLandSize(row.land_size);
+  const value = Number(row.land_size_value ?? parsed.value ?? 0);
+  const unit = row.land_size_unit === 'acres' ? 'acres' : (row.land_size_unit === 'sq ft' ? 'sq ft' : parsed.unit);
+  return {
+    value: Number.isFinite(value) ? value : 0,
+    unit,
+    display: row.land_size || formatLandSize(value, unit) || '—'
+  };
+}
+
 const staticCard = window.card;
 window.card = function propertyCardWithPricePerSqFt(property, shortlist = false) {
   const rendered = staticCard(property, shortlist);
-  const psf = formatPricePerSqFt(property.price, property.built, property.deal);
-  if (!psf || rendered.includes('card-psf')) return rendered;
+  const builtPsf = formatPricePerSqFt(property.price, property.built, property.deal);
+  const landPsf = formatPricePerLandSqFt(property.price, property.landSizeValue, property.landSizeUnit, property.deal);
+  if ((!builtPsf && !landPsf) || rendered.includes('card-psf')) return rendered;
+  const psf = builtPsf
+    ? `${builtPsf}${landPsf ? `<span class="card-land-psf">Land: ${landPsf}</span>` : ''}`
+    : landPsf;
   return rendered.replace(
     '</div><div class="card-details">',
     `<div class="card-psf">${psf}</div></div><div class="card-details">`
@@ -299,6 +349,7 @@ window.card = function propertyCardWithPricePerSqFt(property, shortlist = false)
 };
 
 function propertyFromDb(row) {
+  const landInfo = landInfoFromRow(row);
   const photos = (row.property_photos || [])
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
     .map(photo => photo.url)
@@ -324,7 +375,10 @@ function propertyFromDb(row) {
     price: Number(row.price || 0),
     built: Number(row.built_up_size || 0),
     pricePerSqFt: pricePerSqFt(row.price, row.built_up_size),
-    land: row.land_size || '—',
+    land: landInfo.display,
+    landSizeValue: landInfo.value,
+    landSizeUnit: landInfo.unit,
+    landPricePerSqFt: pricePerLandSqFt(row.price, landInfo.value, landInfo.unit),
     beds: row.bedrooms ?? '—',
     maidRooms: row.maid_rooms ?? null,
     baths: row.bathrooms ?? '—',
@@ -620,6 +674,7 @@ function enhancePropertyForm() {
     });
     typeControl.dataset.wrcChoicesBound = 'true';
   }
+  setupLandSizeField();
   if (!document.getElementById('propertyPhotos')) {
     upload.innerHTML = `<div class="media-upload-section"><label for="propertyPhotos" style="cursor:pointer">↑ &nbsp; Add property photos<br><small>JPG, PNG or WEBP · Add more photos any time before saving</small></label><input id="propertyPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"><div id="photoQueue" class="photo-queue">No photos added yet</div></div><div class="media-upload-section video-upload-section"><label for="propertyVideos" style="cursor:pointer">▶ &nbsp; Add property videos<br><small>MP4, MOV or WEBM · Up to 2 minutes per video</small></label><input id="propertyVideos" type="file" accept="video/mp4,video/quicktime,video/webm" multiple style="display:none"><div id="videoQueue" class="video-queue">No videos added yet</div></div><div class="media-upload-section document-upload-section"><label for="propertyDocuments" style="cursor:pointer">↓ &nbsp; Add listing documents<br><small>PDF only · Brochures, floor plans, unit lists or pricing sheets</small></label><input id="propertyDocuments" type="file" accept="application/pdf,.pdf" multiple style="display:none"><div id="documentQueue" class="document-queue">No PDF documents added yet</div></div>`;
     document.getElementById('propertyPhotos').addEventListener('change', event => {
@@ -648,6 +703,7 @@ function enhancePropertyForm() {
   }
   syncMaidRoomField(grid, categoryControl);
   addPsfPreview(grid);
+  addLandPsfPreview(grid);
 }
 
 function propertyFormField(labelText) {
@@ -655,6 +711,62 @@ function propertyFormField(labelText) {
     const label = field.querySelector('label');
     return (label?.dataset.wrcFieldKey || label?.textContent.trim()) === labelText;
   });
+}
+
+function setupLandSizeField() {
+  const field = propertyFormField('Land size');
+  const input = field?.querySelector('input');
+  if (!field || !input || document.getElementById('wrcLandSizeValue')) return;
+  input.outerHTML = `<div class="land-size-inputs"><input id="wrcLandSizeValue" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 4,500 or 1.25"><select id="wrcLandSizeUnit" aria-label="Land size unit"><option value="sq ft">sq ft</option><option value="acres">acres</option></select></div>`;
+}
+
+function readLandSize() {
+  const value = Number(document.getElementById('wrcLandSizeValue')?.value || 0);
+  const unit = document.getElementById('wrcLandSizeUnit')?.value === 'acres' ? 'acres' : 'sq ft';
+  return {
+    value: value > 0 ? value : null,
+    unit,
+    display: formatLandSize(value, unit)
+  };
+}
+
+function setLandSize(row) {
+  const landInfo = landInfoFromRow(row);
+  const valueInput = document.getElementById('wrcLandSizeValue');
+  const unitSelect = document.getElementById('wrcLandSizeUnit');
+  if (valueInput) valueInput.value = landInfo.value || '';
+  if (unitSelect) unitSelect.value = landInfo.unit;
+}
+
+function refreshLandPsfPreview() {
+  const preview = document.getElementById('wrcLandPsfValue');
+  if (!preview) return;
+  const land = readLandSize();
+  const price = propertyFormField('Price (RM)')?.querySelector('input')?.value;
+  const deal = propertyFormField('Sale / Rent')?.querySelector('select')?.value || '';
+  preview.textContent = formatPricePerLandSqFt(price, land.value, land.unit, deal) || 'Enter total price and land size to calculate.';
+  preview.classList.toggle('has-value', Boolean(pricePerLandSqFt(price, land.value, land.unit)));
+}
+
+function addLandPsfPreview(grid) {
+  let field = document.getElementById('wrcLandPsfField');
+  if (!field) {
+    const landField = propertyFormField('Land size');
+    const markup = `<div id="wrcLandPsfField" class="form-field psf-preview"><label data-wrc-field-key="Land price per sq ft">Land price per sq ft</label><output id="wrcLandPsfValue">Enter total price and land size to calculate.</output></div>`;
+    if (landField) landField.insertAdjacentHTML('afterend', markup);
+    else grid.insertAdjacentHTML('beforeend', markup);
+    field = document.getElementById('wrcLandPsfField');
+  }
+  if (!field?.dataset.wrcLandPsfBound) {
+    document.getElementById('wrcLandSizeValue')?.addEventListener('input', refreshLandPsfPreview);
+    document.getElementById('wrcLandSizeUnit')?.addEventListener('change', refreshLandPsfPreview);
+    ['Price (RM)', 'Sale / Rent'].forEach(labelText => {
+      propertyFormField(labelText)?.querySelector('input, select')?.addEventListener('input', refreshLandPsfPreview);
+      propertyFormField(labelText)?.querySelector('input, select')?.addEventListener('change', refreshLandPsfPreview);
+    });
+    field.dataset.wrcLandPsfBound = 'true';
+  }
+  refreshLandPsfPreview();
 }
 
 function refreshPsfPreview() {
@@ -737,6 +849,7 @@ function savePropertyDraft() {
     const control = field.querySelector('input:not([type="file"]), select, textarea');
     if (key && control) fields[key] = control.value;
   });
+  fields['Land size unit'] = document.getElementById('wrcLandSizeUnit')?.value || 'sq ft';
   try {
     localStorage.setItem(WRC_PROPERTY_DRAFT_KEY, JSON.stringify({ fields, savedAt: Date.now() }));
     const notice = document.getElementById('propertyDraftNotice');
@@ -750,7 +863,10 @@ function restorePropertyDraft() {
   try { draft = JSON.parse(localStorage.getItem(WRC_PROPERTY_DRAFT_KEY) || 'null'); } catch (_) { return false; }
   if (!draft?.fields) return false;
   if (draft.fields.Category) setFieldValue('Category', draft.fields.Category);
-  Object.entries(draft.fields).forEach(([label, value]) => setFieldValue(label, value));
+  Object.entries(draft.fields).forEach(([label, value]) => {
+    if (label !== 'Land size' && label !== 'Land size unit') setFieldValue(label, value);
+  });
+  setLandSize({ land_size_value: draft.fields['Land size'], land_size_unit: draft.fields['Land size unit'] });
   return true;
 }
 
@@ -767,6 +883,7 @@ function enablePropertyDrafts() {
   form.addEventListener('input', savePropertyDraft);
   form.addEventListener('change', savePropertyDraft);
   refreshPsfPreview();
+  refreshLandPsfPreview();
 }
 
 window.discardPropertyDraft = function discardPropertyDraft() {
@@ -971,6 +1088,9 @@ window.detail = function publicDetail(id, updateUrl = true) {
   if (property.pricePerSqFt && propertyMeta && !document.getElementById('psfMeta')) {
     propertyMeta.insertAdjacentHTML('afterbegin', `<div id="psfMeta">Price per sq ft</div><div>${formatPricePerSqFt(property.price, property.built, property.deal)}</div>`);
   }
+  if (property.landPricePerSqFt && propertyMeta && !document.getElementById('landPsfMeta')) {
+    propertyMeta.insertAdjacentHTML('afterbegin', `<div id="landPsfMeta">Land price per sq ft</div><div>${formatPricePerLandSqFt(property.price, property.landSizeValue, property.landSizeUnit, property.deal)}</div>`);
+  }
   if (wrcSession) addListingControls(id);
   scheduleWrcLanguage();
 };
@@ -1033,7 +1153,7 @@ window.editListing = async function editListing(propertyDbId) {
   setFieldValue('Price (RM)', data.price);
   setFieldValue('Status', data.status);
   setFieldValue('Built-up size (sq ft)', data.built_up_size);
-  setFieldValue('Land size', data.land_size);
+  setLandSize(data);
   setFieldValue('Bedrooms', data.bedrooms);
   setFieldValue('Bathrooms', data.bathrooms);
   setFieldValue('Maid / Utility Rooms', data.maid_rooms);
@@ -1044,6 +1164,7 @@ window.editListing = async function editListing(propertyDbId) {
   setFieldValue('Furnishing', data.furnishing);
   setFieldValue('Internal Remarks', data.internal_remarks);
   refreshPsfPreview();
+  refreshLandPsfPreview();
   const button = document.querySelector('.form-wrap button[type="submit"], .form-wrap button:not([type])');
   if (button) button.textContent = 'Update listing →';
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1138,6 +1259,7 @@ async function setCoverPhoto(propertyDbId, coverPhotoId) {
 }
 
 async function saveProperty() {
+  const landSize = readLandSize();
   const property = {
     property_id: fieldValue('Property ID'),
     property_name: fieldValue('Property name'),
@@ -1149,7 +1271,9 @@ async function saveProperty() {
     status: fieldValue('Status'),
     price: optionalNumber(fieldValue('Price (RM)')) || 0,
     built_up_size: optionalNumber(fieldValue('Built-up size (sq ft)')),
-    land_size: fieldValue('Land size'),
+    land_size: landSize.display,
+    land_size_value: landSize.value,
+    land_size_unit: landSize.value ? landSize.unit : null,
     bedrooms: optionalNumber(fieldValue('Bedrooms')),
     maid_rooms: fieldValue('Category') === 'Residential' ? optionalNumber(fieldValue('Maid / Utility Rooms')) : null,
     bathrooms: optionalNumber(fieldValue('Bathrooms')),
@@ -1225,6 +1349,7 @@ document.addEventListener('submit', async event => {
 
 function sharedPropertyFromRpc(record) {
   const row = record.property || record;
+  const landInfo = landInfoFromRow(row);
   return {
     id: row.property_id,
     category: row.category,
@@ -1237,7 +1362,10 @@ function sharedPropertyFromRpc(record) {
     price: Number(row.price || 0),
     built: Number(row.built_up_size || 0),
     pricePerSqFt: pricePerSqFt(row.price, row.built_up_size),
-    land: row.land_size || '—',
+    land: landInfo.display,
+    landSizeValue: landInfo.value,
+    landSizeUnit: landInfo.unit,
+    landPricePerSqFt: pricePerLandSqFt(row.price, landInfo.value, landInfo.unit),
     beds: row.bedrooms ?? '—',
     maidRooms: row.maid_rooms ?? null,
     baths: row.bathrooms ?? '—',
