@@ -287,6 +287,17 @@ function formatPricePerSqFt(price, built, deal = '') {
   return `RM ${psf.toLocaleString('en-MY', { maximumFractionDigits: 2 })} / sq ft${deal === 'Rent' ? ' / month' : ''}`;
 }
 
+const staticCard = window.card;
+window.card = function propertyCardWithPricePerSqFt(property, shortlist = false) {
+  const rendered = staticCard(property, shortlist);
+  const psf = formatPricePerSqFt(property.price, property.built, property.deal);
+  if (!psf || rendered.includes('card-psf')) return rendered;
+  return rendered.replace(
+    '</div><div class="card-details">',
+    `<div class="card-psf">${psf}</div></div><div class="card-details">`
+  );
+};
+
 function propertyFromDb(row) {
   const photos = (row.property_photos || [])
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
