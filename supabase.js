@@ -20,6 +20,218 @@ const notice = (message, type = 'success') => {
   el.style.background = type === 'error' ? '#f8e6e3' : '';
 };
 
+let wrcLanguage = (() => {
+  try { return localStorage.getItem('wrc-language') === 'zh' ? 'zh' : 'en'; } catch (_) { return 'en'; }
+})();
+const wrcOriginalTextNodes = new WeakMap();
+const wrcOriginalAttributes = new WeakMap();
+const WRC_ZH = {
+  'Home': '首页',
+  'Commercial': '商业地产',
+  'Residential': '住宅地产',
+  'Latest Listings': '最新房源',
+  'Latest listings': '最新房源',
+  'Contact': '联系我们',
+  'Contact WRC Property': '联系 WRC Property',
+  'Agent sign in': '经纪人登录',
+  'Agent sign in': '经纪人登录',
+  'Add property': '添加房源',
+  'Find the Right Property, Faster.': '更快找到合适的房产。',
+  'WRC Property Collection': 'WRC 精选房源',
+  'Curated property stock for smoother matching, clearer sharing and more confident client conversations.': '精选房源库存，让配对、分享和客户沟通更轻松。',
+  'Browse listings': '浏览房源',
+  'Client requirement': '客户需求',
+  'Active stock': '在售房源',
+  'To build a shortlist': '创建清单',
+  'To share with clients': '分享给客户',
+  'Find a space for business': '为业务寻找合适空间',
+  'Find a place to call home': '寻找理想居所',
+  'Fresh to market': '最新上市',
+  'View all stock': '查看全部房源',
+  'Made for the way you work': '为您的工作流程而设',
+  'From requirement to shortlist—without the admin.': '从客户需求到精选清单，省去繁琐行政工作。',
+  'Keep your stock organised, identify the strongest matches, and share only what your client needs to see.': '整理房源、快速筛选合适选项，只分享客户需要看的内容。',
+  'Receive requirement': '接收客户需求',
+  'Search your live stock': '搜索现有房源',
+  'Share a polished shortlist': '分享专业精选清单',
+  'Property stock': '房源库存',
+  'Current available stock, ready to match and share.': '目前可用房源，随时可配对和分享。',
+  'Search location / name': '搜索地点或房源名称',
+  'Category': '类别',
+  'Any': '不限',
+  'Sale / Rent': '出售 / 出租',
+  'Sale': '出售',
+  'Rent': '出租',
+  'Property type': '房产类型',
+  'Any type': '不限类型',
+  'Min price': '最低价格',
+  'Max price': '最高价格',
+  'Min size': '最小面积',
+  'Max size': '最大面积',
+  'Bedrooms': '卧室',
+  'Reset': '重置',
+  'Browse available WRC Property listings.': '浏览 WRC Property 可用房源。',
+  'For Rent': '出租',
+  'For Sale': '出售',
+  'View property →': '查看房源 →',
+  '← Back to listings': '← 返回房源列表',
+  'WhatsApp enquiry': 'WhatsApp 咨询',
+  'Built-up': '建筑面积',
+  'Land area': '土地面积',
+  'Bathrooms': '浴室',
+  'Tenure': '地契',
+  'Furnishing': '装修',
+  'Highlights': '亮点',
+  'About this property': '房源介绍',
+  'Copy listing link': '复制房源链接',
+  'Share to social media': '分享到社交媒体',
+  'Share this listing': '分享此房源',
+  'More apps': '更多应用',
+  'Instagram, TikTok and Xiao Hong Shu use the copied link. On mobile, choose': 'Instagram、TikTok 和小红书将使用已复制的链接。在手机上，请选择',
+  'to share directly with installed apps.': '以直接分享到已安装的应用。',
+  'Phone & WhatsApp': '电话与 WhatsApp',
+  'Start a conversation': '开始联系',
+  'Email': '邮箱',
+  "Let's make the right match.": '让我们找到合适的配对。',
+  'For stock enquiries, co-agency or client requirements.': '欢迎咨询房源、合作代理或客户需求。',
+  'Internal property stock.': '内部房源管理。',
+  'Sign in to manage listings, requirements and private shortlists.': '登录以管理房源、客户需求和私人精选清单。',
+  'Use your approved WRC email and password.': '请使用已获批准的 WRC 电邮和密码。',
+  'Work email': '工作电邮',
+  'Password': '密码',
+  'Sign in': '登录',
+  'Set or reset password': '设置或重置密码',
+  'Create your password.': '创建您的密码。',
+  'Choose a password for your WRC Property management account.': '为您的 WRC Property 管理账户设置密码。',
+  'Set password': '设置密码',
+  'New password': '新密码',
+  'Confirm password': '确认密码',
+  'Save password': '保存密码',
+  'Property information': '房源资料',
+  'Complete the essentials now; you can enrich a listing anytime.': '先完成基本资料，稍后可随时补充详情。',
+  'Property ID': '物业编号',
+  'Property name': '房源名称',
+  'Location': '地点',
+  'Price (RM)': '价格（RM）',
+  'Status': '状态',
+  'Available': '可用',
+  'Reserved': '已预留',
+  'Sold': '已售出',
+  'Rented': '已出租',
+  'Hidden': '隐藏',
+  'Built-up size (sq ft)': '建筑面积（平方英尺）',
+  'Land size': '土地面积',
+  'Address': '地址',
+  'Description': '描述',
+  'Photos': '照片',
+  'Internal Remarks': '内部备注',
+  'Save property →': '保存房源 →',
+  'Update listing →': '更新房源 →',
+  'Edit property': '编辑房源',
+  'Update the listing details, availability or photos.': '更新房源资料、可用状态或照片。',
+  'Stock management': '房源管理',
+  'Edit listing': '编辑房源',
+  'Hide this listing': '隐藏此房源',
+  'Hidden listings do not appear in normal searches or client shortlists.': '隐藏房源不会出现在正常搜索或客户精选清单中。',
+  'What are they looking for?': '客户在寻找什么？',
+  'A strong brief makes a sharper shortlist.': '清晰需求能带来更精准的精选清单。',
+  'Buy / Rent': '购买 / 租赁',
+  'Buy': '购买',
+  'Preferred location': '首选地点',
+  'Budget (RM)': '预算（RM）',
+  'Minimum size': '最小面积',
+  'Client name': '客户姓名',
+  'Phone': '电话',
+  'Additional requirements': '其他需求',
+  'Submit requirement →': '提交需求 →',
+  'Private property collection': '私人房源精选',
+  'Selected for you': '为您精选',
+  'Enquire via WhatsApp': '通过 WhatsApp 咨询',
+  'This private collection has been prepared by WRC Property. Availability and pricing are subject to confirmation.': '此私人精选由 WRC Property 准备。可用状态和价格以最终确认为准。'
+};
+const WRC_ZH_ATTRIBUTES = {
+  'Property or location': '房源名称或地点',
+  'e.g. WRC-2407': '例如 WRC-005',
+  'Listing name': '房源名称',
+  'Area, City': '地区、城市',
+  'Full property address': '完整房源地址',
+  'Separate key highlights with commas': '请用逗号分隔各项亮点',
+  'Describe the property, condition and what makes it compelling.': '描述房源、现况和吸引之处。',
+  'Owner details, viewing notes or internal-only information': '业主资料、看房备注或仅供内部使用的信息',
+  'you@company.com': 'you@company.com',
+  'Your password': '您的密码',
+  'At least 8 characters': '至少 8 个字符',
+  'Repeat your password': '再次输入您的密码'
+};
+
+function wrcTranslatedText(text) {
+  const foundCount = text.match(/^(\d+) properties found$/);
+  if (foundCount) return `${foundCount[1]} 个房源`;
+  const oneFound = text.match(/^(\d+) property found$/);
+  if (oneFound) return `${oneFound[1]} 个房源`;
+  return WRC_ZH[text] || text;
+}
+
+function rememberWrcFormKeys() {
+  document.querySelectorAll('.form-field label').forEach(label => {
+    if (!label.dataset.wrcFieldKey) label.dataset.wrcFieldKey = label.textContent.trim();
+  });
+  document.querySelectorAll('.form-wrap h2').forEach(heading => {
+    if (!heading.dataset.wrcHeadingKey) heading.dataset.wrcHeadingKey = heading.textContent.trim();
+  });
+}
+
+function ensureWrcLanguageSwitch() {
+  const topbar = document.querySelector('.topbar');
+  if (!topbar) return;
+  let control = document.getElementById('wrcLanguageSwitch');
+  if (!control) {
+    topbar.insertAdjacentHTML('beforeend', '<button id="wrcLanguageSwitch" class="language-switch" type="button" data-wrc-no-translate="true" onclick="toggleWrcLanguage()"></button>');
+    control = document.getElementById('wrcLanguageSwitch');
+  }
+  control.textContent = wrcLanguage === 'zh' ? 'EN' : '中文';
+  control.setAttribute('aria-label', wrcLanguage === 'zh' ? 'Switch to English' : '切换至中文');
+}
+
+function applyWrcLanguage() {
+  ensureWrcLanguageSwitch();
+  rememberWrcFormKeys();
+  const chinese = wrcLanguage === 'zh';
+  document.documentElement.lang = chinese ? 'zh-Hans' : 'en';
+  document.title = chinese ? 'WRC Property — 房源管理' : 'WRC Property — Stock that moves';
+  document.querySelectorAll('option').forEach(option => {
+    if (!option.hasAttribute('value')) option.value = option.textContent.trim();
+  });
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  textNodes.forEach(node => {
+    const parent = node.parentElement;
+    if (!parent || parent.closest('script, style, [data-wrc-no-translate]')) return;
+    if (!wrcOriginalTextNodes.has(node)) wrcOriginalTextNodes.set(node, node.nodeValue);
+    const original = wrcOriginalTextNodes.get(node);
+    const leading = original.match(/^\s*/)?.[0] || '';
+    const trailing = original.match(/\s*$/)?.[0] || '';
+    const core = original.trim();
+    node.nodeValue = chinese ? `${leading}${wrcTranslatedText(core)}${trailing}` : original;
+  });
+  document.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(control => {
+    const original = wrcOriginalAttributes.get(control) || control.getAttribute('placeholder');
+    if (!wrcOriginalAttributes.has(control)) wrcOriginalAttributes.set(control, original);
+    control.setAttribute('placeholder', chinese ? (WRC_ZH_ATTRIBUTES[original] || original) : original);
+  });
+}
+
+function scheduleWrcLanguage() {
+  requestAnimationFrame(applyWrcLanguage);
+}
+
+window.toggleWrcLanguage = function toggleWrcLanguage() {
+  wrcLanguage = wrcLanguage === 'zh' ? 'en' : 'zh';
+  try { localStorage.setItem('wrc-language', wrcLanguage); } catch (_) { /* Persistence is optional. */ }
+  applyWrcLanguage();
+};
+
 function propertyFromDb(row) {
   const photos = (row.property_photos || [])
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
@@ -60,6 +272,7 @@ async function loadStock() {
     properties.splice(0, properties.length, ...(data || []).map(record => propertyFromDb(record.property)));
     state.selected.clear();
     if (state.view === 'catalogue') renderPublicCatalogue(); else home();
+    scheduleWrcLanguage();
     renderDirectPropertyRoute();
     return;
   }
@@ -76,15 +289,18 @@ async function loadStock() {
   properties.splice(0, properties.length, ...data.map(propertyFromDb));
   state.selected.clear();
   if (state.view === 'catalogue') renderCatalogue(); else home();
+  scheduleWrcLanguage();
   renderDirectPropertyRoute();
 }
 
 function renderDatabaseSetup(errorMessage) {
   app.innerHTML = `${header(true)}<div class="shell page-title"><div class="eyebrow">One last setup</div><h1>Prepare your property database.</h1><p>WRC Property is connected to Supabase. Add the supplied database structure once, then your stock will load here.</p></div></div><main class="shell"><div class="form-wrap"><h2>Run the WRC database script</h2><p>In Supabase, open <b>SQL Editor</b>, create a new query, paste the complete <code>wrc-supabase-schema.sql</code> file, then click Run. Refresh this page afterwards.</p><p class="note">Technical message: ${errorMessage}</p></div></main>${footer()}`;
+  scheduleWrcLanguage();
 }
 
 function renderSignIn() {
   app.innerHTML = `${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>Internal property stock.</h1><p>Sign in to manage listings, requirements and private shortlists.</p></div></div><main class="shell"><form class="form-wrap" style="max-width:520px" onsubmit="signInWithPassword(event)"><h2>Agent sign in</h2><p>Use your approved WRC email and password.</p><div class="form-field"><label>Work email</label><input id="agentEmail" type="email" required autocomplete="email" placeholder="you@company.com"></div><div class="form-field"><label>Password</label><input id="agentPassword" type="password" required minlength="8" autocomplete="current-password" placeholder="Your password"></div><button class="btn gold" style="margin-top:22px">Sign in</button><button class="link-btn" type="button" style="display:block;margin:18px 0 0" onclick="sendPasswordReset()">Set or reset password</button><div class="success"></div></form></main>${footer()}`;
+  scheduleWrcLanguage();
 }
 
 async function signInWithPassword(event) {
@@ -117,6 +333,7 @@ async function sendPasswordReset() {
 
 function renderSetPassword() {
   app.innerHTML = `${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>Create your password.</h1><p>Choose a password for your WRC Property management account.</p></div></div><main class="shell"><form class="form-wrap" style="max-width:520px" onsubmit="updatePassword(event)"><h2>Set password</h2><div class="form-field"><label>New password</label><input id="newPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters"></div><div class="form-field"><label>Confirm password</label><input id="confirmPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="Repeat your password"></div><button class="btn gold" style="margin-top:22px">Save password</button><div class="success"></div></form></main>${footer()}`;
+  scheduleWrcLanguage();
 }
 
 async function updatePassword(event) {
@@ -141,7 +358,10 @@ async function updatePassword(event) {
 
 function fieldValue(label) {
   const field = [...document.querySelectorAll('.form-field')]
-    .find(item => item.querySelector('label')?.textContent.trim() === label);
+    .find(item => {
+      const fieldLabel = item.querySelector('label');
+      return fieldLabel?.dataset.wrcFieldKey === label || fieldLabel?.textContent.trim() === label;
+    });
   return field?.querySelector('input, select, textarea')?.value.trim() || '';
 }
 
@@ -285,6 +505,7 @@ window.propertyForm = function propertyFormWithDatabase() {
   staticPropertyForm();
   enhancePropertyForm();
   setAutomaticPropertyId();
+  scheduleWrcLanguage();
 };
 
 const staticHome = window.home;
@@ -305,6 +526,7 @@ function renderPublicCatalogue() {
     const note = document.querySelector('.results-head .note');
     if (note) note.textContent = 'Browse available WRC Property listings.';
   }
+  scheduleWrcLanguage();
 }
 
 window.home = function publicHome() {
@@ -321,6 +543,7 @@ window.home = function publicHome() {
       workflowButton.onclick = () => window.propertyForm();
     }
   }
+  scheduleWrcLanguage();
 };
 window.catalogue = function publicCatalogue(category) {
   state.view = 'catalogue';
@@ -333,6 +556,7 @@ function listingLink(id) {
 
 function renderPropertyUnavailable() {
   app.innerHTML = `<main>${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>This listing is unavailable.</h1><p>It may no longer be available or the link is incorrect.</p></div></div></main>${footer()}`;
+  scheduleWrcLanguage();
 }
 
 function renderDirectPropertyRoute() {
@@ -374,6 +598,7 @@ window.sharePropertySocial = function sharePropertySocial(id) {
     ? `<button class="social-share-btn" type="button" onclick="nativeShareListing('${id}')">More apps</button>`
     : '';
   aside.insertAdjacentHTML('beforeend', `<div id="socialSharePanel" class="social-share-panel"><div class="social-share-title">Share this listing</div><div class="social-share-actions"><a class="social-share-btn" href="https://wa.me/?text=${encodeURIComponent(`${shareText}\n${link}`)}" target="_blank" rel="noopener">WhatsApp</a><a class="social-share-btn" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}" target="_blank" rel="noopener">Facebook</a><a class="social-share-btn" href="https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(link)}" target="_blank" rel="noopener">X</a>${nativeShare}<button class="social-share-btn" type="button" onclick="copyPropertyLinkForSocial('${id}','Instagram')">Instagram</button><button class="social-share-btn" type="button" onclick="copyPropertyLinkForSocial('${id}','TikTok')">TikTok</button><button class="social-share-btn" type="button" onclick="copyPropertyLinkForSocial('${id}','Xiao Hong Shu')">Xiao Hong Shu</button></div><p>Instagram, TikTok and Xiao Hong Shu use the copied link. On mobile, choose <b>More apps</b> to share directly with installed apps.</p></div>`);
+  scheduleWrcLanguage();
 };
 
 window.nativeShareListing = async function nativeShareListing(id) {
@@ -402,10 +627,12 @@ window.detail = function publicDetail(id, updateUrl = true) {
     aside.insertAdjacentHTML('beforeend', `<button id="sharePropertyLink" class="btn outline small" style="width:100%;margin-top:10px" onclick="sharePropertyLink('${id}')">Copy listing link</button><button class="btn outline small" style="width:100%;margin-top:10px" onclick="sharePropertySocial('${id}')">Share to social media</button>`);
   }
   if (wrcSession) addListingControls(id);
+  scheduleWrcLanguage();
 };
 window.requirement = function protectedRequirement() {
   if (!wrcSession) return renderSignIn();
   staticRequirement();
+  scheduleWrcLanguage();
 };
 window.whatsapp = function primaryWhatsapp() {
   window.open(WRC_WHATSAPP_PRIMARY_URL, '_blank', 'noopener');
@@ -418,6 +645,7 @@ window.contact = function wrcContact() {
   if (phoneHeading && !document.getElementById('primaryWhatsappLink')) {
     phoneHeading.insertAdjacentHTML('afterend', `<a id="primaryWhatsappLink" class="whatsapp-direct-link" href="${WRC_WHATSAPP_PRIMARY_URL}" target="_blank" rel="noopener">${whatsappIcon()} <span>WhatsApp this number</span></a>`);
   }
+  scheduleWrcLanguage();
 };
 window.go = function publicGo() { window.home(); };
 
@@ -430,7 +658,10 @@ function addListingControls(propertyId) {
 
 function setFieldValue(label, value) {
   const field = [...document.querySelectorAll('.form-field')]
-    .find(item => item.querySelector('label')?.textContent.trim() === label);
+    .find(item => {
+      const fieldLabel = item.querySelector('label');
+      return fieldLabel?.dataset.wrcFieldKey === label || fieldLabel?.textContent.trim() === label;
+    });
   const control = field?.querySelector('input, select, textarea');
   if (control) {
     control.value = value ?? '';
@@ -577,7 +808,8 @@ async function saveRequirement() {
 
 document.addEventListener('submit', async event => {
   const form = event.target;
-  const heading = form?.querySelector('h2')?.textContent || '';
+  const headingElement = form?.querySelector('h2');
+  const heading = headingElement?.dataset.wrcHeadingKey || headingElement?.textContent || '';
   if (!wrcSession || !form?.matches('.form-wrap') || !/Property information|What are they looking for/.test(heading)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
@@ -600,6 +832,7 @@ document.addEventListener('submit', async event => {
     notice(error.message || 'Something went wrong. Please try again.', 'error');
   } finally {
     if (button) { button.disabled = false; button.textContent = heading.includes('Property information') ? (wasEditing ? 'Update listing →' : 'Save property →') : 'Submit requirement →'; }
+    scheduleWrcLanguage();
   }
 }, true);
 
@@ -629,12 +862,14 @@ function sharedPropertyFromRpc(record) {
 
 function renderSharedShortlist(items, title = 'A considered shortlist.') {
   app.innerHTML = `<main><section class="share-hero"><div class="shell topbar"><a class="brand" href="#/"><span>WRC</span> PROPERTY</a><span style="font-size:12px;color:#c4d2c9">Private property collection</span></div><div class="shell share-title"><div class="eyebrow">Selected for you</div><h1>${title}</h1><p>${items.length} ${items.length === 1 ? 'property' : 'properties'} selected to match your brief.</p></div></section><section class="section"><div class="shell"><p class="note">This private collection has been prepared by WRC Property. Availability and pricing are subject to confirmation.</p><div class="listing-grid">${items.map(property => card(property, true)).join('')}</div><div style="text-align:center;margin-top:40px"><button class="btn" onclick="shareShortlistOnWhatsApp()">Enquire via WhatsApp</button></div></div></section></main>${footer()}`;
+  scheduleWrcLanguage();
 }
 
 async function loadPublicShortlist(id) {
   const { data, error } = await wrcDb.rpc('get_public_shortlist', { p_shortlist_id: id });
   if (error || !data?.length) {
     app.innerHTML = `<main>${header(true)}<div class="shell page-title"><div class="eyebrow">WRC Property</div><h1>This shortlist is unavailable.</h1><p>It may have expired, changed, or no longer contains available properties.</p></div></div></main>${footer()}`;
+    scheduleWrcLanguage();
     return;
   }
   const items = data.map(sharedPropertyFromRpc);
