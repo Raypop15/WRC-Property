@@ -4,10 +4,12 @@ const WRC_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_t6LOdR-6sleUqeuzHV_8xQ_uc-F
 const wrcDb = window.supabase?.createClient(WRC_SUPABASE_URL, WRC_SUPABASE_PUBLISHABLE_KEY);
 let wrcSession = null;
 let wrcQueuedPhotos = [];
+let wrcQueuedVideos = [];
 let wrcEditingProperty = null;
 let wrcPreserveEditMode = false;
 let wrcPasswordRecoveryActive = false;
 let wrcExistingPhotos = [];
+let wrcExistingVideos = [];
 let wrcCoverPhotoId = null;
 let wrcCoverPhotoKey = null;
 const wrcPhotoPreviews = new Map();
@@ -274,6 +276,10 @@ function propertyFromDb(row) {
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
     .map(photo => photo.url)
     .filter(Boolean);
+  const videos = (row.property_videos || [])
+    .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    .map(video => video.url)
+    .filter(Boolean);
   return {
     id: row.property_id,
     dbId: row.id,
@@ -296,6 +302,7 @@ function propertyFromDb(row) {
     highlights: row.highlights || [],
     description: row.description || '',
     photos: photos.length ? photos : ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1100&q=85'],
+    videos,
     date: row.date_added || ''
   };
 }
@@ -317,7 +324,7 @@ async function loadStock() {
 
   let query = wrcDb
     .from('properties')
-    .select('*, property_photos(id, url, sort_order)')
+    .select('*, property_photos(id, url, sort_order), property_videos(id, url, sort_order, duration_seconds)')
     .order('date_added', { ascending: false });
   const { data, error } = await query;
   if (error) {
@@ -464,6 +471,60 @@ function renderPhotoPicker() {
     : 'No photos added yet';
 }
 
+function renderVideoPicker() {
+  const queue = document.getElementById('videoQueue');
+  if (!queue) return;
+  const existing = wrcExistingVideos.map(video => `<span class="video-queue-item">▶ Uploaded video</span>`).join('');
+  const queued = wrcQueuedVideos.map(file => `<span class="video-queue-item">▶ ${file.name}</span>`).join('');
+  queue.innerHTML = existing || queued
+    ? `<div class="video-queue-list">${existing}${queued}</div>`
+    : 'No videos added yet';
+}
+
+function getVideoDuration(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      const duration = video.duration;
+      URL.revokeObjectURL(url);
+      resolve(duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Video metadata could not be read.'));
+    };
+    video.src = url;
+  });
+}
+
+async function addPropertyVideos(files) {
+  const seen = new Set(wrcQueuedVideos.map(photoFileKey));
+  const messages = [];
+  for (const file of files) {
+    if (seen.has(photoFileKey(file))) continue;
+    const supported = file.type.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(file.name);
+    if (!supported) {
+      messages.push(`${file.name}: use MP4, MOV or WEBM.`);
+      continue;
+    }
+    try {
+      const duration = await getVideoDuration(file);
+      if (!Number.isFinite(duration) || duration > 120) {
+        messages.push(`${file.name}: videos must be 2 minutes or shorter.`);
+        continue;
+      }
+      wrcQueuedVideos.push(file);
+      seen.add(photoFileKey(file));
+    } catch (_) {
+      messages.push(`${file.name}: WRC could not check this video. Please use an MP4, MOV or WEBM file.`);
+    }
+  }
+  if (messages.length) alert(messages.join('\n'));
+  renderVideoPicker();
+}
+
 window.selectCoverPhoto = function selectCoverPhoto(kind, value) {
   if (kind === 'existing') {
     wrcCoverPhotoId = value;
@@ -500,7 +561,7 @@ function enhancePropertyForm() {
     typeControl.dataset.wrcChoicesBound = 'true';
   }
   if (!document.getElementById('propertyPhotos')) {
-    upload.innerHTML = `<label for="propertyPhotos" style="cursor:pointer">↑ &nbsp; Add property photos<br><small>JPG, PNG or WEBP · Add more photos any time before saving</small></label><input id="propertyPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"><div id="photoQueue" class="photo-queue">No photos added yet</div>`;
+    upload.innerHTML = `<div class="media-upload-section"><label for="propertyPhotos" style="cursor:pointer">↑ &nbsp; Add property photos<br><small>JPG, PNG or WEBP · Add more photos any time before saving</small></label><input id="propertyPhotos" type="file" accept="image/jpeg,image/png,image/webp" multiple style="display:none"><div id="photoQueue" class="photo-queue">No photos added yet</div></div><div class="media-upload-section video-upload-section"><label for="propertyVideos" style="cursor:pointer">▶ &nbsp; Add property videos<br><small>MP4, MOV or WEBM · Up to 2 minutes per video</small></label><input id="propertyVideos" type="file" accept="video/mp4,video/quicktime,video/webm" multiple style="display:none"><div id="videoQueue" class="video-queue">No videos added yet</div></div>`;
     document.getElementById('propertyPhotos').addEventListener('change', event => {
       const newFiles = [...event.target.files];
       const seen = new Set(wrcQueuedPhotos.map(photoFileKey));
@@ -508,7 +569,13 @@ function enhancePropertyForm() {
       event.target.value = '';
       renderPhotoPicker();
     });
+    document.getElementById('propertyVideos').addEventListener('change', async event => {
+      const newFiles = [...event.target.files];
+      event.target.value = '';
+      await addPropertyVideos(newFiles);
+    });
     renderPhotoPicker();
+    renderVideoPicker();
   }
   if (!document.getElementById('wrcExtraFields')) {
     grid.insertAdjacentHTML('beforeend', `<div id="wrcExtraFields" class="form-field"><label>Tenure</label><select><option value="">Select tenure</option><option>Freehold</option><option>Leasehold</option></select></div><div class="form-field"><label>Furnishing</label><select><option>Unfurnished</option><option>Partly Furnished</option><option>Fully Furnished</option><option>Bare Unit</option></select></div><div class="form-field full"><label>Internal Remarks</label><textarea placeholder="Owner details, viewing notes or internal-only information"></textarea></div>`);
@@ -609,7 +676,9 @@ window.propertyForm = function propertyFormWithDatabase() {
   if (!wrcPreserveEditMode) wrcEditingProperty = null;
   clearPhotoPreviews();
   wrcQueuedPhotos = [];
+  wrcQueuedVideos = [];
   wrcExistingPhotos = [...(wrcEditingProperty?.property_photos || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  wrcExistingVideos = [...(wrcEditingProperty?.property_videos || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   wrcCoverPhotoId = wrcExistingPhotos[0]?.id || null;
   wrcCoverPhotoKey = null;
   staticPropertyForm();
@@ -622,6 +691,7 @@ window.propertyForm = function propertyFormWithDatabase() {
 const staticHome = window.home;
 const staticCatalogue = window.catalogue;
 const staticDetail = window.detail;
+const staticChangePhoto = window.changePhoto;
 const staticRequirement = window.requirement;
 const staticRenderCatalogue = window.renderCatalogue;
 const staticContact = window.contact;
@@ -741,10 +811,35 @@ window.copyPropertyLinkForSocial = async function copyPropertyLinkForSocial(id, 
   alert(`Listing link copied. Open ${platform} and paste it into your post or message.`);
 };
 
+window.changePhoto = function changePhotoWithVideo(url, el) {
+  const main = document.getElementById('mainPhoto');
+  if (main?.tagName === 'VIDEO') {
+    main.outerHTML = '<div id="mainPhoto" class="gallery-main"></div>';
+  }
+  staticChangePhoto(url, el);
+  document.querySelectorAll('.gallery-video-thumb').forEach(item => item.classList.remove('active'));
+};
+
+window.changeGalleryVideo = function changeGalleryVideo(url, el) {
+  const main = document.getElementById('mainPhoto');
+  if (!main) return;
+  main.outerHTML = `<video id="mainPhoto" class="gallery-main gallery-video" controls playsinline preload="metadata"><source src="${url}">Your browser cannot play this video.</video>`;
+  document.querySelectorAll('.gallery-thumb, .gallery-video-thumb').forEach(item => item.classList.remove('active'));
+  el.classList.add('active');
+};
+
+function addGalleryVideos(property) {
+  if (!property.videos?.length) return;
+  const thumbs = document.querySelector('.gallery-thumbs');
+  if (!thumbs || thumbs.querySelector('.gallery-video-thumb')) return;
+  thumbs.insertAdjacentHTML('beforeend', property.videos.map(video => `<button class="gallery-video-thumb" type="button" onclick="changeGalleryVideo('${video}', this)"><span>▶</span> Video</button>`).join(''));
+}
+
 window.detail = function publicDetail(id, updateUrl = true) {
   const property = properties.find(item => item.id === id);
   if (!property) return renderPropertyUnavailable();
   staticDetail(id);
+  addGalleryVideos(property);
   if (updateUrl && !window.wrcSharedMode) history.pushState({}, '', `#/property/${encodeURIComponent(id)}`);
   const aside = document.querySelector('.detail-aside');
   if (aside && !document.getElementById('sharePropertyLink')) {
@@ -798,7 +893,7 @@ function setFieldValue(label, value) {
 }
 
 window.editListing = async function editListing(propertyDbId) {
-  const { data, error } = await wrcDb.from('properties').select('*, property_photos(id, url, sort_order)').eq('id', propertyDbId).single();
+  const { data, error } = await wrcDb.from('properties').select('*, property_photos(id, url, sort_order), property_videos(id, url, sort_order, duration_seconds)').eq('id', propertyDbId).single();
   if (error) return alert(error.message);
   wrcEditingProperty = data;
   wrcPreserveEditMode = true;
@@ -864,6 +959,23 @@ async function uploadPhotos(propertyDbId, files) {
   return new Map();
 }
 
+async function uploadVideos(propertyDbId, files) {
+  if (!files.length) return;
+  const { data: existingVideos } = await wrcDb.from('property_videos').select('sort_order').eq('property_id', propertyDbId).order('sort_order', { ascending: false }).limit(1);
+  const firstSortOrder = (existingVideos?.[0]?.sort_order ?? -1) + 1;
+  const videoRows = [];
+  for (const [index, file] of [...files].entries()) {
+    const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, '-');
+    const path = `${propertyDbId}/videos/${Date.now()}-${index}-${safeName}`;
+    const { error } = await wrcDb.storage.from('property-photos').upload(path, file, { cacheControl: '3600', upsert: false });
+    if (error) throw error;
+    const { data } = wrcDb.storage.from('property-photos').getPublicUrl(path);
+    videoRows.push({ property_id: propertyDbId, storage_path: path, url: data.publicUrl, sort_order: firstSortOrder + index });
+  }
+  const { error } = await wrcDb.from('property_videos').insert(videoRows);
+  if (error) throw error;
+}
+
 async function setCoverPhoto(propertyDbId, coverPhotoId) {
   if (!coverPhotoId) return;
   const { data: allPhotos, error } = await wrcDb
@@ -916,6 +1028,7 @@ async function saveProperty() {
   const uploadedPhotoIds = await uploadPhotos(data.id, files);
   const selectedCoverPhotoId = wrcCoverPhotoId || uploadedPhotoIds.get(wrcCoverPhotoKey);
   await setCoverPhoto(data.id, selectedCoverPhotoId);
+  await uploadVideos(data.id, wrcQueuedVideos);
   return data;
 }
 
@@ -951,6 +1064,7 @@ document.addEventListener('submit', async event => {
       const savedProperty = await saveProperty();
       clearPropertyDraft();
       wrcQueuedPhotos = [];
+      wrcQueuedVideos = [];
       wrcEditingProperty = null;
       await loadStock();
       window.detail(savedProperty.property_id);
@@ -989,7 +1103,8 @@ function sharedPropertyFromRpc(record) {
     highlight: (row.highlights || [])[0] || 'WRC selected listing',
     highlights: row.highlights || [],
     description: row.description || '',
-    photos: row.photos?.length ? row.photos : ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1100&q=85']
+    photos: row.photos?.length ? row.photos : ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1100&q=85'],
+    videos: row.videos || []
   };
 }
 
