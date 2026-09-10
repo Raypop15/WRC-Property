@@ -91,6 +91,8 @@ const WRC_ZH = {
   'Built-up': '建筑面积',
   'Land area': '土地面积',
   'Bathrooms': '浴室',
+  'Parking': '停车位',
+  'Select parking': '选择停车位',
   'Tenure': '地契',
   'Furnishing': '装修',
   'Highlights': '亮点',
@@ -382,6 +384,7 @@ function propertyFromDb(row) {
     beds: row.bedrooms ?? '—',
     maidRooms: row.maid_rooms ?? null,
     baths: row.bathrooms ?? '—',
+    parking: row.parking_spaces ?? null,
     tenure: row.tenure || '—',
     furnishing: row.furnishing || '—',
     highlight: (row.highlights || [])[0] || 'WRC selected listing',
@@ -702,6 +705,7 @@ function enhancePropertyForm() {
     grid.insertAdjacentHTML('beforeend', `<div id="wrcExtraFields" class="form-field"><label>Tenure</label><select><option value="">Select tenure</option><option>Freehold</option><option>Leasehold</option></select></div><div class="form-field"><label>Furnishing</label><select><option>Unfurnished</option><option>Partly Furnished</option><option>Fully Furnished</option><option>Bare Unit</option></select></div><div class="form-field full"><label>Internal Remarks</label><textarea placeholder="Owner details, viewing notes or internal-only information"></textarea></div>`);
   }
   syncMaidRoomField(grid, categoryControl);
+  addParkingField(grid);
   addPsfPreview(grid);
   addLandPsfPreview(grid);
 }
@@ -810,6 +814,18 @@ function syncMaidRoomField(grid, categoryControl) {
     return (label?.dataset.wrcFieldKey || label?.textContent.trim()) === 'Bathrooms';
   });
   const markup = `<div id="wrcMaidRoomField" class="form-field"><label data-wrc-field-key="Maid / Utility Rooms">Maid / Utility Rooms</label><input type="number" min="0" step="1" placeholder="0"></div>`;
+  if (bathroomField) bathroomField.insertAdjacentHTML('afterend', markup);
+  else grid.insertAdjacentHTML('beforeend', markup);
+}
+
+function addParkingField(grid) {
+  if (document.getElementById('wrcParkingField')) return;
+  const bathroomField = [...grid.querySelectorAll('.form-field')].find(field => {
+    const label = field.querySelector('label');
+    return (label?.dataset.wrcFieldKey || label?.textContent.trim()) === 'Bathrooms';
+  });
+  const options = ['Select parking', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+  const markup = `<div id="wrcParkingField" class="form-field"><label data-wrc-field-key="Parking">Parking</label><select>${options.map(option => `<option value="${option === 'Select parking' ? '' : option}">${option}</option>`).join('')}</select></div>`;
   if (bathroomField) bathroomField.insertAdjacentHTML('afterend', markup);
   else grid.insertAdjacentHTML('beforeend', markup);
 }
@@ -1091,6 +1107,9 @@ window.detail = function publicDetail(id, updateUrl = true) {
   if (property.landPricePerSqFt && propertyMeta && !document.getElementById('landPsfMeta')) {
     propertyMeta.insertAdjacentHTML('afterbegin', `<div id="landPsfMeta">Land price per sq ft</div><div>${formatPricePerLandSqFt(property.price, property.landSizeValue, property.landSizeUnit, property.deal)}</div>`);
   }
+  if (property.parking !== null && property.parking !== '' && propertyMeta && !document.getElementById('parkingMeta')) {
+    propertyMeta.insertAdjacentHTML('beforeend', `<div id="parkingMeta">Parking</div><div>${property.parking}</div>`);
+  }
   if (wrcSession) addListingControls(id);
   scheduleWrcLanguage();
 };
@@ -1156,6 +1175,7 @@ window.editListing = async function editListing(propertyDbId) {
   setLandSize(data);
   setFieldValue('Bedrooms', data.bedrooms);
   setFieldValue('Bathrooms', data.bathrooms);
+  setFieldValue('Parking', data.parking_spaces);
   setFieldValue('Maid / Utility Rooms', data.maid_rooms);
   setFieldValue('Address', data.address);
   setFieldValue('Highlights', (data.highlights || []).join(', '));
@@ -1277,6 +1297,7 @@ async function saveProperty() {
     bedrooms: optionalNumber(fieldValue('Bedrooms')),
     maid_rooms: fieldValue('Category') === 'Residential' ? optionalNumber(fieldValue('Maid / Utility Rooms')) : null,
     bathrooms: optionalNumber(fieldValue('Bathrooms')),
+    parking_spaces: optionalNumber(fieldValue('Parking')),
     tenure: fieldValue('Tenure'),
     furnishing: fieldValue('Furnishing'),
     description: fieldValue('Description'),
@@ -1369,6 +1390,7 @@ function sharedPropertyFromRpc(record) {
     beds: row.bedrooms ?? '—',
     maidRooms: row.maid_rooms ?? null,
     baths: row.bathrooms ?? '—',
+    parking: row.parking_spaces ?? null,
     tenure: row.tenure || '—',
     furnishing: row.furnishing || '—',
     highlight: (row.highlights || [])[0] || 'WRC selected listing',
