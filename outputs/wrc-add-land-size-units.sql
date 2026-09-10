@@ -2,7 +2,8 @@
 
 alter table public.properties
   add column if not exists land_size_value numeric,
-  add column if not exists land_size_unit text;
+  add column if not exists land_size_unit text,
+  add column if not exists parking_spaces integer;
 
 do $$
 begin
@@ -14,6 +15,15 @@ begin
     alter table public.properties
       add constraint properties_land_size_unit_check
       check (land_size_unit is null or land_size_unit in ('sq ft', 'acres'));
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'properties_parking_spaces_check'
+      and conrelid = 'public.properties'::regclass
+  ) then
+    alter table public.properties
+      add constraint properties_parking_spaces_check
+      check (parking_spaces is null or parking_spaces >= 0);
   end if;
 end $$;
 
@@ -41,6 +51,7 @@ as $$
     'bedrooms', p.bedrooms,
     'maid_rooms', p.maid_rooms,
     'bathrooms', p.bathrooms,
+    'parking_spaces', p.parking_spaces,
     'tenure', p.tenure,
     'furnishing', p.furnishing,
     'description', p.description,
@@ -94,6 +105,7 @@ as $$
       'bedrooms', p.bedrooms,
       'maid_rooms', p.maid_rooms,
       'bathrooms', p.bathrooms,
+      'parking_spaces', p.parking_spaces,
       'tenure', p.tenure,
       'furnishing', p.furnishing,
       'description', p.description,
